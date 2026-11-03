@@ -6,6 +6,26 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <RootNamespace>LightSQL</RootNamespace>
+    <AssemblyName>LightSQL</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SQL editor: syntax highlighting, line numbers, caret line/column tracking. -->
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <!-- Modern SQL Server connectivity (replacement for System.Data.SqlClient). -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- Lightweight MVVM: ObservableObject, [ObservableProperty], [RelayCommand]. -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- Dependency injection for wiring services and view models at startup. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <!-- Note: Windows DPAPI (System.Security.Cryptography.ProtectedData) is provided
+         by the net10.0-windows framework and does not need a package reference. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- T-SQL highlighting definition loaded at runtime via HighlightingManager. -->
+    <EmbeddedResource Include="Editor\SqlSyntax.xshd" />
+  </ItemGroup>
 
 </Project>

@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="LightSQL/LightSQL.csproj" />
+  <Project Path="LightSQL.Tests/LightSQL.Tests.csproj" />
 </Solution>

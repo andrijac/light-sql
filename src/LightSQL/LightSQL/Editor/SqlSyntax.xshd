@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- T-SQL syntax highlighting for AvalonEdit. Loaded at runtime via HighlightingManager. -->
+<SyntaxDefinition name="SQL" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+
+  <Color name="Comment" foreground="#FF008000" />
+  <Color name="String" foreground="#FFA31515" />
+  <Color name="Keyword" foreground="#FF0000FF" fontWeight="bold" />
+  <Color name="DataType" foreground="#FF2B91AF" />
+  <Color name="Function" foreground="#FFAA00AA" />
+  <Color name="Variable" foreground="#FF7F0055" />
+  <Color name="Number" foreground="#FFAF5F00" />
+
+  <RuleSet ignoreCase="true">
+
+    <!-- Comments -->
+    <Span color="Comment" begin="--" />
+    <Span color="Comment" multiline="true" begin="/\*" end="\*/" />
+
+    <!-- String literals -->
+    <Span color="String" multiline="true">
+      <Begin>'</Begin>
+      <End>'</End>
+    </Span>
+
+    <!-- Local variables and parameters (@name) -->
+    <Rule color="Variable">
+      @[\w]+
+    </Rule>
+
+    <!-- Statement and clause keywords -->
+    <Keywords color="Keyword">
+      <Word>ADD</Word>
+      <Word>ALL</Word>
+      <Word>ALTER</Word>
+      <Word>AND</Word>
+      <Word>AS</Word>
+      <Word>ASC</Word>
+      <Word>BACKUP</Word>
+      <Word>BEGIN</Word>
+      <Word>BETWEEN</Word>
+      <Word>BREAK</Word>
+      <Word>BY</Word>
+      <Word>CASCADE</Word>
+      <Word>CASE</Word>
+      <Word>CHECK</Word>
+      <Word>CLOSE</Word>
+      <Word>CLUSTERED</Word>
+      <Word>COLUMN</Word>
+      <Word>COMMIT</Word>
+      <Word>CONSTRAINT</Word>
+      <Word>CONTINUE</Word>
+      <Word>CREATE</Word>
+      <Word>CROSS</Word>
+      <Word>CURRENT</Word>
+      <Word>CURSOR</Word>
+      <Word>DATABASE</Word>
+      <Word>DECLARE</Word>
+      <Word>DEFAULT</Word>
+      <Word>DELETE</Word>
+      <Word>DESC</Word>
+      <Word>DISTINCT</Word>
+      <Word>DROP</Word>
+      <Word>ELSE</Word>
+      <Word>END</Word>
+      <Word>EXEC</Word>
+      <Word>EXECUTE</Word>
+      <Word>EXISTS</Word>
+      <Word>FETCH</Word>
+      <Word>FOR</Word>
+      <Word>FOREIGN</Word>
+      <Word>FROM</Word>
+      <Word>FULL</Word>
+      <Word>FUNCTION</Word>
+      <Word>GO</Word>
+      <Word>GRANT</Word>
+      <Word>GROUP</Word>
+      <Word>HAVING</Word>
+      <Word>IDENTITY</Word>
+      <Word>IF</Word>
+      <Word>IN</Word>
+      <Word>INDEX</Word>
+      <Word>INNER</Word>
+      <Word>INSERT</Word>
+      <Word>INTO</Word>
+      <Word>IS</Word>
+      <Word>JOIN</Word>
+      <Word>KEY</Word>
+      <Word>LEFT</Word>
+      <Word>LIKE</Word>
+      <Word>MERGE</Word>
+      <Word>NOT</Word>
+      <Word>NULL</Word>
+      <Word>NONCLUSTERED</Word>
+      <Word>OFF</Word>
+      <Word>ON</Word>
+      <Word>OPEN</Word>
+      <Word>OR</Word>
+      <Word>ORDER</Word>
+      <Word>OUTER</Word>
+      <Word>OVER</Word>
+      <Word>PRIMARY</Word>
+      <Word>PRINT</Word>
+      <Word>PROCEDURE</Word>
+      <Word>RETURN</Word>
+      <Word>REVOKE</Word>
+      <Word>RIGHT</Word>
+      <Word>ROLLBACK</Word>
+      <Word>SCHEMA</Word>
+      <Word>SELECT</Word>
+      <Word>SET</Word>
+      <Word>TABLE</Word>
+      <Word>THEN</Word>
+      <Word>TOP</Word>
+      <Word>TRANSACTION</Word>
+      <Word>TRIGGER</Word>
+      <Word>TRUNCATE</Word>
+      <Word>UNION</Word>
+      <Word>UNIQUE</Word>
+      <Word>UPDATE</Word>
+      <Word>USE</Word>
+      <Word>VALUES</Word>
+      <Word>VIEW</Word>
+      <Word>WHEN</Word>
+      <Word>WHERE</Word>
+      <Word>WHILE</Word>
+      <Word>WITH</Word>
+    </Keywords>
+
+    <!-- Data types -->
+    <Keywords color="DataType">
+      <Word>BIGINT</Word>
+      <Word>BINARY</Word>
+      <Word>BIT</Word>
+      <Word>CHAR</Word>
+      <Word>DATE</Word>
+      <Word>DATETIME</Word>
+      <Word>DATETIME2</Word>
+      <Word>DATETIMEOFFSET</Word>
+      <Word>DECIMAL</Word>
+      <Word>FLOAT</Word>
+      <Word>GEOGRAPHY</Word>
+      <Word>GEOMETRY</Word>
+      <Word>IMAGE</Word>
+      <Word>INT</Word>
+      <Word>MONEY</Word>
+      <Word>NCHAR</Word>
+      <Word>NTEXT</Word>
+      <Word>NUMERIC</Word>
+      <Word>NVARCHAR</Word>
+      <Word>REAL</Word>
+      <Word>SMALLDATETIME</Word>
+      <Word>SMALLINT</Word>
+      <Word>SMALLMONEY</Word>
+      <Word>SQL_VARIANT</Word>
+      <Word>TEXT</Word>
+      <Word>TIME</Word>
+      <Word>TINYINT</Word>
+      <Word>UNIQUEIDENTIFIER</Word>
+      <Word>VARBINARY</Word>
+      <Word>VARCHAR</Word>
+      <Word>XML</Word>
+    </Keywords>
+
+    <!-- Common built-in functions -->
+    <Keywords color="Function">
+      <Word>ABS</Word>
+      <Word>AVG</Word>
+      <Word>CAST</Word>
+      <Word>CEILING</Word>
+      <Word>COALESCE</Word>
+      <Word>CONVERT</Word>
+      <Word>COUNT</Word>
+      <Word>DATEADD</Word>
+      <Word>DATEDIFF</Word>
+      <Word>DATEPART</Word>
+      <Word>FLOOR</Word>
+      <Word>GETDATE</Word>
+      <Word>GETUTCDATE</Word>
+      <Word>ISNULL</Word>
+      <Word>LEN</Word>
+      <Word>LOWER</Word>
+      <Word>LTRIM</Word>
+      <Word>MAX</Word>
+      <Word>MIN</Word>
+      <Word>NEWID</Word>
+      <Word>NULLIF</Word>
+      <Word>REPLACE</Word>
+      <Word>ROUND</Word>
+      <Word>ROW_NUMBER</Word>
+      <Word>RTRIM</Word>
+      <Word>SUBSTRING</Word>
+      <Word>SUM</Word>
+      <Word>UPPER</Word>
+    </Keywords>
+
+    <!-- Numeric literals -->
+    <Rule color="Number">
+      \b0[xX][0-9a-fA-F]+|\b\d+(\.\d+)?([eE][+-]?\d+)?
+    </Rule>
+
+  </RuleSet>
+</SyntaxDefinition>
