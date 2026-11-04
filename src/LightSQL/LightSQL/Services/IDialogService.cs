@@ -18,6 +18,13 @@ namespace LightSQL.Services
         bool Confirm(string message, string title);
 
         /// <summary>
+        /// Asks whether to save a query that has unsaved changes before closing it.
+        /// </summary>
+        /// <param name="queryName">The display name of the query.</param>
+        /// <returns>Save, Discard (don't save) or Cancel (keep it open).</returns>
+        SaveChangesChoice ConfirmSaveChanges(string queryName);
+
+        /// <summary>
         /// Shows an informational message.
         /// </summary>
         /// <param name="message">The message to show.</param>

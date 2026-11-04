@@ -1,0 +1,198 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Object Explorer icons, drawn as 16x16 vector images so they stay crisp at any
+         DPI and need no image files. Every icon starts with a transparent 16x16 square
+         so all icons share the same bounds and line up in the tree. Strokes sit on
+         half-pixel coordinates to render sharply at 100% scaling.
+         The keys are referenced by ObjectExplorerIconConverter. -->
+
+    <RectangleGeometry x:Key="IconBounds" Rect="0,0,16,16" />
+
+    <!-- Server: a grey tower with two drive bays and a green power light. -->
+    <DrawingImage x:Key="Icon.Server">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="#FF6E7781" Geometry="M3.5,1.5 L12.5,1.5 L12.5,14.5 L3.5,14.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF3E444A" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FFD0D5DA" Geometry="M5,3.5 L11,3.5 L11,5 L5,5 Z M5,6.5 L11,6.5 L11,8 L5,8 Z" />
+                <GeometryDrawing Brush="#FF3FB950">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="10,12" RadiusX="1.2" RadiusY="1.2" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Folder (collapsed): a closed yellow folder. -->
+    <DrawingImage x:Key="Icon.FolderClosed">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="#FFF2C55C" Geometry="M1.5,3.5 L6,3.5 L7.5,5 L14.5,5 L14.5,13.5 L1.5,13.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FFC08A1E" Thickness="1" LineJoin="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Folder (expanded): an open yellow folder with a tilted front flap. -->
+    <DrawingImage x:Key="Icon.FolderOpen">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="#FFE0AE40" Geometry="M1.5,13.5 L1.5,3.5 L6,3.5 L7.5,5 L13.5,5 L13.5,7.5 L3,7.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FFC08A1E" Thickness="1" LineJoin="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FFF7D57A" Geometry="M3,7.5 L15.5,7.5 L13.5,13.5 L1.5,13.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FFC08A1E" Thickness="1" LineJoin="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Database: a blue cylinder. -->
+    <DrawingImage x:Key="Icon.Database">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="#FF7FA7D9" Geometry="M3.5,3.5 L3.5,12.5 A4.5,1.75 0 0 0 12.5,12.5 L12.5,3.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2E5C99" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Geometry="M3.5,8 A4.5,1.75 0 0 0 12.5,8">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2E5C99" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FFB9D3F2">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="8,3.5" RadiusX="4.5" RadiusY="1.75" />
+                    </GeometryDrawing.Geometry>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2E5C99" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Table: a grid with a blue header row. -->
+    <DrawingImage x:Key="Icon.Table">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="White" Geometry="M1.5,2.5 L14.5,2.5 L14.5,13.5 L1.5,13.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2E5C99" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FF3B78C9" Geometry="M2,3 L14,3 L14,6 L2,6 Z" />
+                <GeometryDrawing Geometry="M2,9.5 L14,9.5 M6.5,6 L6.5,13 M10.5,6 L10.5,13">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF9DB6D6" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- View: a grid with a green header row and a lens (a "window" onto data). -->
+    <DrawingImage x:Key="Icon.View">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="White" Geometry="M1.5,2.5 L14.5,2.5 L14.5,13.5 L1.5,13.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2D7A45" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FF3E9E5F" Geometry="M2,3 L14,3 L14,6 L2,6 Z" />
+                <GeometryDrawing Geometry="M2,9.5 L7,9.5 M6.5,6 L6.5,13">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FFA8D1B4" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FFE8F5EC">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="10.5,10" RadiusX="2.75" RadiusY="2.75" />
+                    </GeometryDrawing.Geometry>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2D7A45" Thickness="1.2" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Geometry="M12.5,12 L15,14.5">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2D7A45" Thickness="1.6" StartLineCap="Round" EndLineCap="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Column: a single tall table column with a blue header cell. -->
+    <DrawingImage x:Key="Icon.Column">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="White" Geometry="M5.5,1.5 L10.5,1.5 L10.5,14.5 L5.5,14.5 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF2E5C99" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FF3B78C9" Geometry="M6,2 L10,2 L10,5 L6,5 Z" />
+                <GeometryDrawing Geometry="M6,8.5 L10,8.5 M6,11.5 L10,11.5">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF9DB6D6" Thickness="1" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Loading placeholder: a grey hourglass. -->
+    <DrawingImage x:Key="Icon.Loading">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="#FFF0F0F0" Geometry="M4.5,1.5 L11.5,1.5 L11.5,3 L8.8,8 L11.5,13 L11.5,14.5 L4.5,14.5 L4.5,13 L7.2,8 L4.5,3 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF808080" Thickness="1" LineJoin="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FFB0B0B0" Geometry="M5.5,13.5 L10.5,13.5 L8,10.5 Z" />
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- Error: a red circle with a white cross. -->
+    <DrawingImage x:Key="Icon.Error">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="Transparent" Geometry="{StaticResource IconBounds}" />
+                <GeometryDrawing Brush="#FFD9363E">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="8,8" RadiusX="6.5" RadiusY="6.5" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Geometry="M5.5,5.5 L10.5,10.5 M10.5,5.5 L5.5,10.5">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="White" Thickness="1.6" StartLineCap="Round" EndLineCap="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+</ResourceDictionary>

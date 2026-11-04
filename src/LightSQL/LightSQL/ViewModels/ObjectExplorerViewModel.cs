@@ -120,7 +120,7 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Starts a new empty query against the node's database.
+        /// Opens a new, empty query tab against the node's database.
         /// </summary>
         /// <param name="node">The database node.</param>
         [RelayCommand]
@@ -131,16 +131,14 @@ namespace LightSQL.ViewModels
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(node.DatabaseName) == false)
-            {
-                MainActions.SetActiveDatabase(node.DatabaseName);
-            }
+            string? database = string.IsNullOrWhiteSpace(node.DatabaseName) == true ? null : node.DatabaseName;
 
-            MainActions.SetEditorText(string.Empty);
+            MainActions.OpenQueryTab(database, string.Empty);
         }
 
         /// <summary>
-        /// Builds and runs a SELECT TOP query for a table or view node.
+        /// Builds a SELECT TOP query for a table or view node, opens it in a new query
+        /// tab and runs it (like SSMS).
         /// </summary>
         /// <param name="node">The table or view node.</param>
         /// <returns>A task that completes when execution finishes.</returns>
@@ -159,8 +157,7 @@ namespace LightSQL.ViewModels
 
             string sql = $"SELECT TOP {SelectTopRowCount} * FROM {BracketQualified(node.SchemaName, node.ObjectName)}";
 
-            MainActions.SetActiveDatabase(node.DatabaseName);
-            MainActions.SetEditorText(sql);
+            MainActions.OpenQueryTab(node.DatabaseName, sql);
 
             await MainActions.ExecuteAsync();
         }
@@ -197,10 +194,10 @@ namespace LightSQL.ViewModels
             try
             {
                 // Databases are dropped from master; tables/views from their own database.
+                // The database is passed explicitly so no query tab's database changes.
                 string targetDatabase = node.ObjectType == DatabaseObjectType.Database ? "master" : node.DatabaseName;
-                sqlService.SetCurrentDatabase(targetDatabase);
 
-                QueryExecutionResult result = await sqlService.ExecuteBatchAsync(dropSql, CancellationToken.None);
+                QueryExecutionResult result = await sqlService.ExecuteBatchAsync(dropSql, targetDatabase, CancellationToken.None);
 
                 if (result.IsSuccess == false)
                 {

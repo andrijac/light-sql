@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
@@ -7,8 +8,8 @@ using LightSQL.Services;
 namespace LightSQL.ViewModels
 {
     /// <summary>
-    /// The main window's view model. Orchestrates connection, query execution,
-    /// saved queries, options and the Object Explorer.
+    /// The main window's view model. Orchestrates the connection, the query tabs
+    /// (SSMS-style documents), saved queries, options and the Object Explorer.
     /// </summary>
     public partial class MainViewModel : ObservableObject, IMainActions
     {
@@ -18,20 +19,11 @@ namespace LightSQL.ViewModels
         private readonly IOptionsService optionsService;
         private readonly IDialogService dialogService;
 
-        private CancellationTokenSource? executionCancellation;
-        private bool suppressDatabaseChange;
-
-        [ObservableProperty]
-        private string editorText = string.Empty;
-
-        [ObservableProperty]
-        private string selectedText = string.Empty;
-
-        [ObservableProperty]
-        private int caretLine = 1;
-
-        [ObservableProperty]
-        private int caretColumn = 1;
+        /// <summary>
+        /// Number used for the next default tab title ("SQLQuery{n}"). Never reused,
+        /// like SSMS, so titles stay unique for the session.
+        /// </summary>
+        private int nextQueryNumber = 1;
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(ExecuteQueryCommand))]
@@ -41,35 +33,28 @@ namespace LightSQL.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(ExecuteQueryCommand))]
         [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
-        private bool isExecuting;
+        [NotifyCanExecuteChangedFor(nameof(SaveQueryCommand))]
+        private QueryTabViewModel? selectedTab;
 
         [ObservableProperty]
         private string connectionStatus = "Not connected";
 
         [ObservableProperty]
-        private string? activeDatabase;
-
-        [ObservableProperty]
         private string statusMessage = "Ready";
 
-        [ObservableProperty]
-        private string rowCountText = string.Empty;
-
-        [ObservableProperty]
-        private string elapsedText = string.Empty;
-
-        [ObservableProperty]
-        private string? currentQueryName;
+        /// <summary>
+        /// Prefix of the default title given to new, unsaved query tabs.
+        /// </summary>
+        private const string DefaultTitlePrefix = "SQLQuery";
 
         /// <summary>
-        /// Creates the main view model.
+        /// Creates the main view model and opens the first, empty query tab.
         /// </summary>
         /// <param name="sqlService">SQL Server connection/execution service.</param>
         /// <param name="statementAnalyzer">Analyzer for the UPDATE/DELETE guard.</param>
         /// <param name="queryStore">Store for saved queries.</param>
         /// <param name="optionsService">Application options.</param>
         /// <param name="dialogService">User prompts and dialogs.</param>
-        /// <param name="results">The results panel view model.</param>
         /// <param name="objectExplorer">The Object Explorer view model.</param>
         public MainViewModel(
             ISqlConnectionService sqlService,
@@ -77,7 +62,6 @@ namespace LightSQL.ViewModels
             IQueryStore queryStore,
             IOptionsService optionsService,
             IDialogService dialogService,
-            ResultsViewModel results,
             ObjectExplorerViewModel objectExplorer)
         {
             this.sqlService = sqlService;
@@ -86,27 +70,24 @@ namespace LightSQL.ViewModels
             this.optionsService = optionsService;
             this.dialogService = dialogService;
 
-            Results = results;
             ObjectExplorer = objectExplorer;
             ObjectExplorer.MainActions = this;
 
             RefreshSavedQueries();
+
+            // Start with one empty query, like SSMS's "New Query".
+            AddTab(null, string.Empty, null);
         }
-
-        /// <summary>
-        /// Raised after options are saved so the view can re-apply editor settings.
-        /// </summary>
-        public event Action? OptionsApplied;
-
-        /// <summary>
-        /// The results panel.
-        /// </summary>
-        public ResultsViewModel Results { get; }
 
         /// <summary>
         /// The Object Explorer tree.
         /// </summary>
         public ObjectExplorerViewModel ObjectExplorer { get; }
+
+        /// <summary>
+        /// The open query tabs, in display order.
+        /// </summary>
+        public ObservableCollection<QueryTabViewModel> Tabs { get; } = new();
 
         /// <summary>
         /// The databases available on the connected server (toolbar dropdown).
@@ -119,6 +100,17 @@ namespace LightSQL.ViewModels
         public ObservableCollection<SavedQuery> SavedQueries { get; } = new();
 
         /// <summary>
+        /// Whether at least one query tab is open.
+        /// </summary>
+        public bool HasTabs
+        {
+            get
+            {
+                return Tabs.Count > 0;
+            }
+        }
+
+        /// <summary>
         /// The current application options.
         /// </summary>
         public AppOptions Options
@@ -129,32 +121,48 @@ namespace LightSQL.ViewModels
             }
         }
 
-        /// <inheritdoc />
-        public void SetEditorText(string sql)
+        /// <summary>
+        /// Whether the editors show line numbers (bound by every tab's editor).
+        /// </summary>
+        public bool ShowLineNumbers
         {
-            EditorText = sql;
+            get
+            {
+                return Options.ShowLineNumbers;
+            }
+        }
+
+        /// <summary>
+        /// The editor font size in points (bound by every tab's editor).
+        /// </summary>
+        public double EditorFontSize
+        {
+            get
+            {
+                return Options.EditorFontSize;
+            }
         }
 
         /// <inheritdoc />
-        public void SetActiveDatabase(string database)
+        public void OpenQueryTab(string? database, string sql)
         {
-            if (string.IsNullOrWhiteSpace(database) == true)
-            {
-                return;
-            }
-
-            if (Databases.Contains(database) == false)
+            if (string.IsNullOrWhiteSpace(database) == false && Databases.Contains(database) == false)
             {
                 Databases.Add(database);
             }
 
-            ActiveDatabase = database;
+            AddTab(database, sql, null);
         }
 
         /// <inheritdoc />
         public Task ExecuteAsync()
         {
-            return ExecuteQueryAsync();
+            if (SelectedTab is null)
+            {
+                return Task.CompletedTask;
+            }
+
+            return SelectedTab.ExecuteAsync();
         }
 
         /// <inheritdoc />
@@ -169,6 +177,10 @@ namespace LightSQL.ViewModels
             {
                 IReadOnlyList<string> databases = await sqlService.GetDatabasesAsync(CancellationToken.None);
 
+                // Remember each tab's database: clearing the list makes the toolbar
+                // dropdown push a null selection into the selected tab.
+                Dictionary<QueryTabViewModel, string?> previous = Tabs.ToDictionary(tab => tab, tab => tab.ActiveDatabase);
+
                 Databases.Clear();
 
                 foreach (string database in databases)
@@ -176,20 +188,47 @@ namespace LightSQL.ViewModels
                     Databases.Add(database);
                 }
 
-                // Select the server's current database without re-issuing SetCurrentDatabase.
-                suppressDatabaseChange = true;
-
                 string? current = sqlService.CurrentDatabase;
-                ActiveDatabase = current is not null && Databases.Contains(current) == true
+                string? fallback = current is not null && Databases.Contains(current) == true
                     ? current
                     : Databases.FirstOrDefault();
 
-                suppressDatabaseChange = false;
+                foreach (QueryTabViewModel tab in Tabs)
+                {
+                    string? remembered = previous[tab];
+                    tab.ActiveDatabase = remembered is not null && Databases.Contains(remembered) == true ? remembered : fallback;
+                }
             }
             catch (Exception ex)
             {
                 StatusMessage = $"Could not list databases: {ex.Message}";
             }
+        }
+
+        /// <summary>
+        /// Asks to save every tab with unsaved changes, e.g. before the application
+        /// closes.
+        /// </summary>
+        /// <returns>True when it is OK to close; false when the user cancelled.</returns>
+        public bool ConfirmCloseAll()
+        {
+            foreach (QueryTabViewModel tab in Tabs.ToList())
+            {
+                if (tab.IsModified == false)
+                {
+                    continue;
+                }
+
+                // Show the tab being asked about.
+                SelectedTab = tab;
+
+                if (ConfirmSaveIfModified(tab) == false)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -230,7 +269,7 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Disconnects from the current server.
+        /// Disconnects from the current server. Open tabs stay open but lose their database.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanDisconnect))]
         private void Disconnect()
@@ -239,141 +278,124 @@ namespace LightSQL.ViewModels
             IsConnected = false;
             ConnectionStatus = "Not connected";
             Databases.Clear();
-            ActiveDatabase = null;
+
+            foreach (QueryTabViewModel tab in Tabs)
+            {
+                tab.ActiveDatabase = null;
+            }
+
             ObjectExplorer.Clear();
             StatusMessage = "Disconnected";
         }
 
         /// <summary>
-        /// Executes the current query (selection if any, otherwise the whole editor),
-        /// applying the UPDATE/DELETE-without-WHERE guard first.
+        /// Executes the query in the selected tab. Concurrent executions are allowed so
+        /// that another tab can run while one is still executing.
         /// </summary>
         /// <returns>A task that completes when execution finishes.</returns>
-        [RelayCommand(CanExecute = nameof(CanExecuteQuery))]
-        private async Task ExecuteQueryAsync()
+        [RelayCommand(CanExecute = nameof(CanExecuteQuery), AllowConcurrentExecutions = true)]
+        private Task ExecuteQueryAsync()
         {
-            if (sqlService.IsConnected == false)
-            {
-                dialogService.ShowInformation("Connect to a server first.", "Not Connected");
-
-                return;
-            }
-
-            string sql = string.IsNullOrWhiteSpace(SelectedText) == false ? SelectedText : EditorText;
-
-            if (string.IsNullOrWhiteSpace(sql) == true)
-            {
-                return;
-            }
-
-            if (Options.WarnOnUpdateDeleteWithoutWhere == true && statementAnalyzer.HasUnguardedUpdateOrDelete(sql) == true)
-            {
-                bool proceed = dialogService.Confirm(
-                    "This batch contains an UPDATE or DELETE with no WHERE clause, which affects every row. Execute anyway?",
-                    "Confirm Execution");
-
-                if (proceed == false)
-                {
-                    StatusMessage = "Execution cancelled";
-
-                    return;
-                }
-            }
-
-            IsExecuting = true;
-            StatusMessage = "Executing...";
-            RowCountText = string.Empty;
-            ElapsedText = string.Empty;
-            executionCancellation = new CancellationTokenSource();
-
-            try
-            {
-                QueryExecutionResult result = await sqlService.ExecuteBatchAsync(sql, executionCancellation.Token);
-
-                Results.Load(result);
-                ElapsedText = $"{result.Elapsed.TotalMilliseconds:N0} ms";
-
-                if (result.TotalRows > 0)
-                {
-                    RowCountText = $"{result.TotalRows} row(s)";
-                }
-                else
-                {
-                    RowCountText = $"{result.RecordsAffected} row(s) affected";
-                }
-
-                StatusMessage = result.IsSuccess == true ? "Query executed successfully" : "Query completed with errors";
-            }
-            catch (OperationCanceledException)
-            {
-                Results.ShowMessage("Query cancelled.");
-                StatusMessage = "Query cancelled";
-            }
-            catch (Exception ex)
-            {
-                Results.ShowMessage(ex.Message);
-                StatusMessage = "Execution error";
-            }
-            finally
-            {
-                IsExecuting = false;
-                executionCancellation?.Dispose();
-                executionCancellation = null;
-            }
+            return ExecuteAsync();
         }
 
         /// <summary>
-        /// Cancels the running query.
+        /// Cancels the query running in the selected tab.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanCancel))]
         private void Cancel()
         {
-            executionCancellation?.Cancel();
+            SelectedTab?.CancelExecution();
         }
 
         /// <summary>
-        /// Clears the editor to start a new query.
+        /// Opens a new, empty query tab using the selected tab's database.
         /// </summary>
         [RelayCommand]
         private void NewQuery()
         {
-            EditorText = string.Empty;
-            CurrentQueryName = null;
+            string? database = SelectedTab?.ActiveDatabase;
+
+            if (database is null && IsConnected == true)
+            {
+                database = sqlService.CurrentDatabase;
+            }
+
+            AddTab(database, string.Empty, null);
             StatusMessage = "New query";
         }
 
         /// <summary>
-        /// Saves the current editor content under a name in the personal folder.
+        /// Closes a query tab (the selected one when none is given), asking to save
+        /// unsaved changes first and cancelling its execution if it is running.
         /// </summary>
+        /// <param name="tab">The tab to close, or null for the selected tab.</param>
         [RelayCommand]
-        private void SaveQuery()
+        private void CloseQuery(QueryTabViewModel? tab)
         {
-            string? name = dialogService.PromptForText(
-                "Save Query",
-                "Query name:",
-                CurrentQueryName ?? string.Empty,
-                candidate => queryStore.IsValidName(candidate));
+            QueryTabViewModel? target = tab ?? SelectedTab;
 
-            if (name is null)
+            if (target is null)
             {
                 return;
             }
 
-            try
+            if (ConfirmSaveIfModified(target) == false)
             {
-                queryStore.Save(name, EditorText);
-                CurrentQueryName = name;
-                RefreshSavedQueries();
-                StatusMessage = $"Saved '{name}'";
+                return;
             }
-            catch (Exception ex)
+
+            RemoveTab(target);
+        }
+
+        /// <summary>
+        /// Closes every tab except the given one ("Close All But This").
+        /// </summary>
+        /// <param name="tab">The tab to keep, or null for the selected tab.</param>
+        [RelayCommand]
+        private void CloseOtherQueries(QueryTabViewModel? tab)
+        {
+            QueryTabViewModel? keep = tab ?? SelectedTab;
+
+            if (keep is null)
             {
-                dialogService.ShowError(ex.Message, "Save Query");
+                return;
+            }
+
+            foreach (QueryTabViewModel other in Tabs.Where(candidate => candidate != keep).ToList())
+            {
+                // Show the tab being asked about; stop on Cancel like SSMS.
+                if (other.IsModified == true)
+                {
+                    SelectedTab = other;
+                }
+
+                if (ConfirmSaveIfModified(other) == false)
+                {
+                    return;
+                }
+
+                RemoveTab(other);
+            }
+
+            SelectedTab = keep;
+        }
+
+        /// <summary>
+        /// Saves the selected tab's text under a name in the personal folder.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(HasSelectedTab))]
+        private void SaveQuery()
+        {
+            if (SelectedTab is not null)
+            {
+                SaveTab(SelectedTab);
             }
         }
 
         /// <summary>
-        /// Opens a saved query into the editor.
+        /// Opens a saved query. Activates its tab when it is already open, reuses the
+        /// selected tab when it is an untouched new query, and otherwise opens a new tab.
         /// </summary>
         /// <param name="query">The saved query to open.</param>
         [RelayCommand]
@@ -384,16 +406,40 @@ namespace LightSQL.ViewModels
                 return;
             }
 
+            QueryTabViewModel? existing = Tabs.FirstOrDefault(
+                tab => string.Equals(tab.QueryName, query.Name, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (existing is not null)
+            {
+                SelectedTab = existing;
+                StatusMessage = $"'{query.Name}' is already open";
+
+                return;
+            }
+
+            string content;
+
             try
             {
-                EditorText = queryStore.ReadContent(query.Name);
-                CurrentQueryName = query.Name;
-                StatusMessage = $"Opened '{query.Name}'";
+                content = queryStore.ReadContent(query.Name);
             }
             catch (Exception ex)
             {
                 dialogService.ShowError(ex.Message, "Open Query");
+
+                return;
             }
+
+            if (SelectedTab is not null && SelectedTab.IsPristine == true)
+            {
+                SelectedTab.LoadText(content, query.Name);
+            }
+            else
+            {
+                AddTab(SelectedTab?.ActiveDatabase, content, query.Name);
+            }
+
+            StatusMessage = $"Opened '{query.Name}'";
         }
 
         /// <summary>
@@ -411,7 +457,7 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Shows the Options dialog and re-applies editor settings when saved.
+        /// Shows the Options dialog and re-applies editor settings to all tabs when saved.
         /// </summary>
         [RelayCommand]
         private void ShowOptions()
@@ -420,44 +466,186 @@ namespace LightSQL.ViewModels
 
             if (saved == true)
             {
-                OptionsApplied?.Invoke();
+                OnPropertyChanged(nameof(ShowLineNumbers));
+                OnPropertyChanged(nameof(EditorFontSize));
                 StatusMessage = "Options saved";
             }
         }
 
         /// <summary>
-        /// Updates the active database on the service when the selection changes.
+        /// Keeps the tabs' IsSelected flags in sync with the selection, so only the
+        /// selected tab's editor is shown.
         /// </summary>
-        /// <param name="value">The newly selected database.</param>
-        partial void OnActiveDatabaseChanged(string? value)
+        /// <param name="oldValue">The previously selected tab.</param>
+        /// <param name="newValue">The newly selected tab.</param>
+        partial void OnSelectedTabChanged(QueryTabViewModel? oldValue, QueryTabViewModel? newValue)
         {
-            if (suppressDatabaseChange == true)
+            if (oldValue is not null)
+            {
+                oldValue.IsSelected = false;
+            }
+
+            if (newValue is not null)
+            {
+                newValue.IsSelected = true;
+            }
+        }
+
+        /// <summary>
+        /// Creates a tab, adds it after the existing tabs and selects it.
+        /// </summary>
+        /// <param name="database">The tab's database, or null.</param>
+        /// <param name="sql">The initial SQL text.</param>
+        /// <param name="name">The saved query name, or null for a new query.</param>
+        /// <returns>The new tab.</returns>
+        private QueryTabViewModel AddTab(string? database, string sql, string? name)
+        {
+            QueryTabViewModel tab = new(
+                sqlService,
+                statementAnalyzer,
+                optionsService,
+                dialogService,
+                $"{DefaultTitlePrefix}{nextQueryNumber}");
+
+            nextQueryNumber++;
+
+            tab.ActiveDatabase = string.IsNullOrWhiteSpace(database) == true ? null : database;
+            tab.LoadText(sql, name);
+            tab.PropertyChanged += OnTabPropertyChanged;
+
+            Tabs.Add(tab);
+            OnPropertyChanged(nameof(HasTabs));
+
+            SelectedTab = tab;
+
+            return tab;
+        }
+
+        /// <summary>
+        /// Removes a tab without prompting, cancelling its execution, and selects the
+        /// neighbouring tab when the removed one was selected.
+        /// </summary>
+        /// <param name="tab">The tab to remove.</param>
+        private void RemoveTab(QueryTabViewModel tab)
+        {
+            int index = Tabs.IndexOf(tab);
+
+            if (index < 0)
             {
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(value) == false)
+            bool wasSelected = SelectedTab == tab;
+
+            tab.CancelExecution();
+            tab.PropertyChanged -= OnTabPropertyChanged;
+            tab.IsSelected = false;
+
+            Tabs.RemoveAt(index);
+            OnPropertyChanged(nameof(HasTabs));
+
+            if (wasSelected == true || (SelectedTab is not null && Tabs.Contains(SelectedTab) == false))
             {
-                sqlService.SetCurrentDatabase(value);
+                SelectedTab = Tabs.Count == 0 ? null : Tabs[Math.Min(index, Tabs.Count - 1)];
+            }
+        }
+
+        /// <summary>
+        /// Asks whether to save a modified tab and saves it if requested.
+        /// </summary>
+        /// <param name="tab">The tab about to be closed.</param>
+        /// <returns>True when the tab may be closed; false when the user cancelled.</returns>
+        private bool ConfirmSaveIfModified(QueryTabViewModel tab)
+        {
+            if (tab.IsModified == false)
+            {
+                return true;
+            }
+
+            SaveChangesChoice choice = dialogService.ConfirmSaveChanges(tab.DisplayName);
+
+            switch (choice)
+            {
+                case SaveChangesChoice.Save:
+                {
+                    return SaveTab(tab);
+                }
+
+                case SaveChangesChoice.Discard:
+                {
+                    return true;
+                }
+
+                default:
+                {
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Prompts for a name and saves a tab's text to the personal folder.
+        /// </summary>
+        /// <param name="tab">The tab to save.</param>
+        /// <returns>True when saved; false when cancelled or failed.</returns>
+        private bool SaveTab(QueryTabViewModel tab)
+        {
+            string? name = dialogService.PromptForText(
+                "Save Query",
+                "Query name:",
+                tab.QueryName ?? string.Empty,
+                candidate => queryStore.IsValidName(candidate));
+
+            if (name is null)
+            {
+                return false;
+            }
+
+            try
+            {
+                queryStore.Save(name, tab.EditorText);
+                tab.MarkSaved(name);
+                RefreshSavedQueries();
+                StatusMessage = $"Saved '{name}'";
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                dialogService.ShowError(ex.Message, "Save Query");
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Re-evaluates the Execute/Cancel buttons when a tab starts or stops executing.
+        /// </summary>
+        private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(QueryTabViewModel.IsExecuting))
+            {
+                ExecuteQueryCommand.NotifyCanExecuteChanged();
+                CancelCommand.NotifyCanExecuteChanged();
             }
         }
 
         /// <summary>
         /// Whether a query can be executed now.
         /// </summary>
-        /// <returns>True when connected and not already executing.</returns>
+        /// <returns>True when connected and the selected tab is not already executing.</returns>
         private bool CanExecuteQuery()
         {
-            return IsConnected == true && IsExecuting == false;
+            return IsConnected == true && SelectedTab is not null && SelectedTab.IsExecuting == false;
         }
 
         /// <summary>
         /// Whether a running query can be cancelled now.
         /// </summary>
-        /// <returns>True while executing.</returns>
+        /// <returns>True while the selected tab is executing.</returns>
         private bool CanCancel()
         {
-            return IsExecuting == true;
+            return SelectedTab is not null && SelectedTab.IsExecuting == true;
         }
 
         /// <summary>
@@ -467,6 +655,15 @@ namespace LightSQL.ViewModels
         private bool CanDisconnect()
         {
             return IsConnected == true;
+        }
+
+        /// <summary>
+        /// Whether a tab is selected (for tab-level commands such as Save).
+        /// </summary>
+        /// <returns>True when a tab is selected.</returns>
+        private bool HasSelectedTab()
+        {
+            return SelectedTab is not null;
         }
     }
 }

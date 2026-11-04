@@ -1,12 +1,15 @@
-﻿using System.Windows;
-using LightSQL.Models;
+﻿using System.ComponentModel;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using LightSQL.ViewModels;
 
 namespace LightSQL
 {
     /// <summary>
-    /// The application's main window. Hosts the menu, toolbar, Object Explorer,
-    /// SQL editor, results and footer, and applies editor-related options.
+    /// The application's main window. Hosts the menu, toolbar, Object Explorer, the
+    /// query tabs (each with its own editor and results) and the footer.
     /// </summary>
     public partial class MainWindow : Window
     {
@@ -22,30 +25,37 @@ namespace LightSQL
 
             this.viewModel = viewModel;
             DataContext = viewModel;
-
-            viewModel.OptionsApplied += ApplyEditorOptions;
-
-            Loaded += OnLoaded;
         }
 
         /// <summary>
-        /// Applies editor options and focuses the editor once the window is shown.
+        /// Asks to save modified query tabs before the window closes; cancels the
+        /// close when the user chooses Cancel.
         /// </summary>
-        private void OnLoaded(object sender, RoutedEventArgs e)
+        private void OnWindowClosing(object? sender, CancelEventArgs e)
         {
-            ApplyEditorOptions();
-            SqlEditor.FocusEditor();
+            if (viewModel.ConfirmCloseAll() == false)
+            {
+                e.Cancel = true;
+            }
         }
 
         /// <summary>
-        /// Applies the current editor options (line numbers, font size) to the editor.
+        /// Closes a query tab when its header is middle-clicked (as in SSMS and browsers).
         /// </summary>
-        private void ApplyEditorOptions()
+        private void QueryTabStrip_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            AppOptions options = viewModel.Options;
+            if (e.ChangedButton != MouseButton.Middle)
+            {
+                return;
+            }
 
-            SqlEditor.SetShowLineNumbers(options.ShowLineNumbers);
-            SqlEditor.SetFontSize(options.EditorFontSize);
+            TabItem? tabItem = FindAncestor<TabItem>(e.OriginalSource as DependencyObject);
+
+            if (tabItem?.DataContext is QueryTabViewModel tab)
+            {
+                viewModel.CloseQueryCommand.Execute(tab);
+                e.Handled = true;
+            }
         }
 
         /// <summary>
@@ -67,6 +77,30 @@ namespace LightSQL
                 "About LightSQL",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// Walks up the visual tree to find the nearest ancestor of a given type.
+        /// </summary>
+        /// <typeparam name="T">The ancestor type to find.</typeparam>
+        /// <param name="element">The element to start from (inclusive).</param>
+        /// <returns>The ancestor, or null when there is none.</returns>
+        private static T? FindAncestor<T>(DependencyObject? element) where T : DependencyObject
+        {
+            DependencyObject? current = element;
+
+            while (current is not null)
+            {
+                if (current is T match)
+                {
+                    return match;
+                }
+
+                // Text runs are not visuals; fall back to the logical parent for them.
+                current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
+            }
+
+            return null;
         }
     }
 }

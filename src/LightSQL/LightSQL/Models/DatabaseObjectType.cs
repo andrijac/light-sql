@@ -49,6 +49,16 @@ namespace LightSQL.Models
         /// <summary>
         /// A single column of a table or view.
         /// </summary>
-        Column = 9
+        Column = 9,
+
+        /// <summary>
+        /// The temporary "Loading..." node shown until a node's children are loaded.
+        /// </summary>
+        Placeholder = 10,
+
+        /// <summary>
+        /// A node reporting that loading a node's children failed.
+        /// </summary>
+        Error = 11
     }
 }

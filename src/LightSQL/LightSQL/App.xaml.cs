@@ -57,8 +57,8 @@ namespace LightSQL
             services.AddSingleton<ISqlStatementAnalyzer, SqlStatementAnalyzer>();
             services.AddSingleton<IDialogService, DialogService>();
 
-            // View models.
-            services.AddSingleton<ResultsViewModel>();
+            // View models. Query tabs (and their ResultsViewModel) are created by
+            // MainViewModel, one per open query, so they are not registered here.
             services.AddSingleton<ObjectExplorerViewModel>();
             services.AddSingleton<MainViewModel>();
 

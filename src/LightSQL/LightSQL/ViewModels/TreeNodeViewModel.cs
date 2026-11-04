@@ -149,7 +149,7 @@ namespace LightSQL.ViewModels
             catch (Exception ex)
             {
                 Children.Clear();
-                Children.Add(new TreeNodeViewModel($"(error: {ex.Message})", DatabaseObjectType.Column));
+                Children.Add(new TreeNodeViewModel($"(error: {ex.Message})", DatabaseObjectType.Error));
             }
             finally
             {
@@ -163,7 +163,7 @@ namespace LightSQL.ViewModels
         /// <returns>A placeholder node.</returns>
         private static TreeNodeViewModel CreatePlaceholder()
         {
-            return new TreeNodeViewModel("Loading...", DatabaseObjectType.Column);
+            return new TreeNodeViewModel("Loading...", DatabaseObjectType.Placeholder);
         }
     }
 }

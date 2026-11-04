@@ -2,26 +2,21 @@ namespace LightSQL.ViewModels
 {
     /// <summary>
     /// Actions the Object Explorer can ask the main window to perform, such as
-    /// setting the editor text or switching the active database. Implemented by
+    /// opening a query tab or executing the current query. Implemented by
     /// <see cref="MainViewModel"/> and set on the explorer after construction to
     /// avoid a circular dependency.
     /// </summary>
     public interface IMainActions
     {
         /// <summary>
-        /// Replaces the editor content with the given SQL.
+        /// Opens a new query tab with the given SQL and database and selects it.
         /// </summary>
-        /// <param name="sql">The SQL to place in the editor.</param>
-        void SetEditorText(string sql);
+        /// <param name="database">The tab's database, or null for the default.</param>
+        /// <param name="sql">The SQL to place in the new tab's editor.</param>
+        void OpenQueryTab(string? database, string sql);
 
         /// <summary>
-        /// Makes the given database the active one for execution and the toolbar.
-        /// </summary>
-        /// <param name="database">The database to make active.</param>
-        void SetActiveDatabase(string database);
-
-        /// <summary>
-        /// Executes the current editor content.
+        /// Executes the query in the selected tab.
         /// </summary>
         /// <returns>A task that completes when execution finishes.</returns>
         Task ExecuteAsync();

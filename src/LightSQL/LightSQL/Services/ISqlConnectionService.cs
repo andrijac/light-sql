@@ -20,7 +20,8 @@ namespace LightSQL.Services
         string? ServerName { get; }
 
         /// <summary>
-        /// The database used for query execution, or null when disconnected.
+        /// The connection's default database (captured when connecting), used when a
+        /// batch is executed without an explicit database. Null when disconnected.
         /// </summary>
         string? CurrentDatabase { get; }
 
@@ -47,18 +48,15 @@ namespace LightSQL.Services
         void Disconnect();
 
         /// <summary>
-        /// Sets the database used for subsequent query execution.
-        /// </summary>
-        /// <param name="database">The database name to make active.</param>
-        void SetCurrentDatabase(string database);
-
-        /// <summary>
-        /// Executes a SQL batch and returns its result sets, messages and timing.
+        /// Executes a SQL batch against a database and returns its result sets,
+        /// messages and timing. Each call uses its own connection, so several batches
+        /// (for example from different query tabs) can run at the same time.
         /// </summary>
         /// <param name="sql">The SQL batch to run.</param>
+        /// <param name="database">The database to run in, or null for <see cref="CurrentDatabase"/>.</param>
         /// <param name="cancellationToken">Token to cancel execution.</param>
         /// <returns>The execution result.</returns>
-        Task<QueryExecutionResult> ExecuteBatchAsync(string sql, CancellationToken cancellationToken);
+        Task<QueryExecutionResult> ExecuteBatchAsync(string sql, string? database, CancellationToken cancellationToken);
 
         /// <summary>
         /// Lists the online databases on the connected server.

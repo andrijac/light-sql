@@ -140,9 +140,18 @@ namespace LightSQL.Services
             {
                 ConnectionProfile copy = profile.Clone();
 
-                if (copy.SavePassword == true && string.IsNullOrEmpty(copy.Password) == false)
+                // A password typed into the dialog wins; otherwise use one embedded in
+                // a raw connection string, so it survives being stripped below.
+                string? passwordToSave = copy.Password;
+
+                if (string.IsNullOrEmpty(passwordToSave) == true && copy.UseRawConnectionString == true)
                 {
-                    copy.ProtectedPassword = credentialProtector.Protect(copy.Password);
+                    passwordToSave = ExtractPassword(copy.RawConnectionString);
+                }
+
+                if (copy.SavePassword == true && string.IsNullOrEmpty(passwordToSave) == false)
+                {
+                    copy.ProtectedPassword = credentialProtector.Protect(passwordToSave);
                 }
                 else
                 {
@@ -163,6 +172,30 @@ namespace LightSQL.Services
 
             string json = JsonSerializer.Serialize(sanitized, serializerOptions);
             File.WriteAllText(filePath, json);
+        }
+
+        /// <summary>
+        /// Reads the password embedded in a raw connection string, if any.
+        /// </summary>
+        /// <param name="connectionString">The raw connection string.</param>
+        /// <returns>The embedded password, or null when there is none or the string cannot be parsed.</returns>
+        private static string? ExtractPassword(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString) == true)
+            {
+                return null;
+            }
+
+            try
+            {
+                SqlConnectionStringBuilder builder = new(connectionString);
+
+                return string.IsNullOrEmpty(builder.Password) == true ? null : builder.Password;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         /// <summary>

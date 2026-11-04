@@ -9,8 +9,8 @@ namespace LightSQL.Services
     /// <summary>
     /// Default implementation of <see cref="ISqlConnectionService"/> using
     /// Microsoft.Data.SqlClient. A fresh pooled connection is opened per operation,
-    /// targeting the active database, which keeps execution thread-safe and the UI
-    /// responsive.
+    /// targeting the requested database, which keeps execution thread-safe (several
+    /// query tabs can execute at once) and the UI responsive.
     /// </summary>
     public sealed class SqlConnectionService : ISqlConnectionService
     {
@@ -96,16 +96,7 @@ namespace LightSQL.Services
         }
 
         /// <inheritdoc />
-        public void SetCurrentDatabase(string database)
-        {
-            if (string.IsNullOrWhiteSpace(database) == false)
-            {
-                currentDatabase = database;
-            }
-        }
-
-        /// <inheritdoc />
-        public async Task<QueryExecutionResult> ExecuteBatchAsync(string sql, CancellationToken cancellationToken)
+        public async Task<QueryExecutionResult> ExecuteBatchAsync(string sql, string? database, CancellationToken cancellationToken)
         {
             EnsureConnected();
 
@@ -113,9 +104,12 @@ namespace LightSQL.Services
             StringBuilder messages = new();
             Stopwatch stopwatch = Stopwatch.StartNew();
 
+            // Fall back to the connection's default database when none is given.
+            string? targetDatabase = string.IsNullOrWhiteSpace(database) == true ? currentDatabase : database;
+
             try
             {
-                string connectionString = ConnectionStringFactory.Build(activeProfile!, currentDatabase);
+                string connectionString = ConnectionStringFactory.Build(activeProfile!, targetDatabase);
 
                 await using SqlConnection connection = new(connectionString);
 

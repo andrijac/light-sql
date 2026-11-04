@@ -3,15 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:LightSQL.ViewModels"
         xmlns:views="clr-namespace:LightSQL.Views"
-        Title="LightSQL"
+        xmlns:converters="clr-namespace:LightSQL.Converters"
+        Title="{Binding SelectedTab.Header, StringFormat='{}{0} - LightSQL', FallbackValue='LightSQL', TargetNullValue='LightSQL'}"
         Height="700"
         Width="1100"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Closing="OnWindowClosing">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibility" />
+        <converters:ObjectExplorerIconConverter x:Key="ObjectExplorerIcon" />
+    </Window.Resources>
 
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding ExecuteQueryCommand}" />
         <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewQueryCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveQueryCommand}" />
+        <KeyBinding Key="F4" Modifiers="Control" Command="{Binding CloseQueryCommand}" />
     </Window.InputBindings>
 
     <DockPanel>
@@ -30,6 +39,7 @@
                     </MenuItem.ItemContainerStyle>
                 </MenuItem>
                 <MenuItem Header="_Save Query" InputGestureText="Ctrl+S" Command="{Binding SaveQueryCommand}" />
+                <MenuItem Header="_Close Query" InputGestureText="Ctrl+F4" Command="{Binding CloseQueryCommand}" />
                 <MenuItem Header="_Refresh Saved Queries" Command="{Binding RefreshSavedQueriesCommand}" />
                 <Separator />
                 <MenuItem Header="E_xit" Click="ExitMenu_Click" />
@@ -74,11 +84,12 @@
                 <Button Content="Connect" Command="{Binding ConnectCommand}" ToolTip="Connect to a server" />
                 <Separator />
                 <TextBlock Text="Database:" VerticalAlignment="Center" Margin="4,0" />
+                <!-- Each query tab has its own database; this shows/changes the selected tab's. -->
                 <ComboBox Width="200"
                           ItemsSource="{Binding Databases}"
-                          SelectedItem="{Binding ActiveDatabase}"
+                          SelectedItem="{Binding SelectedTab.ActiveDatabase}"
                           IsEnabled="{Binding IsConnected}"
-                          ToolTip="Active database" />
+                          ToolTip="Database of the current query tab" />
                 <Separator />
                 <Button Content="Execute (F5)"
                         Command="{Binding ExecuteQueryCommand}"
@@ -106,14 +117,18 @@
             </StatusBarItem>
             <Separator />
             <StatusBarItem>
-                <TextBlock Text="{Binding ActiveDatabase, TargetNullValue='(no database)'}" />
+                <TextBlock Text="{Binding SelectedTab.ActiveDatabase, TargetNullValue='(no database)', FallbackValue='(no database)'}" />
             </StatusBarItem>
+            <!-- Execution details of the selected query tab. -->
             <StatusBarItem HorizontalAlignment="Right">
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal"
+                            DataContext="{Binding SelectedTab}"
+                            Visibility="{Binding DataContext.HasTabs, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Text="{Binding ExecutionStatus}" Margin="0,0,12,0" />
                     <TextBlock Text="{Binding RowCountText}" Margin="0,0,12,0" />
                     <TextBlock Text="{Binding ElapsedText}" Margin="0,0,12,0" />
                     <TextBlock>
-                        <Run Text="Ln " /><Run Text="{Binding CaretLine}" /><Run Text=", Col " /><Run Text="{Binding CaretColumn}" />
+                        <Run Text="Ln " /><Run Text="{Binding CaretLine, Mode=OneWay}" /><Run Text=", Col " /><Run Text="{Binding CaretColumn, Mode=OneWay}" />
                     </TextBlock>
                 </StackPanel>
             </StatusBarItem>
@@ -132,8 +147,38 @@
                       Grid.Column="0"
                       ItemsSource="{Binding ObjectExplorer.RootNodes}">
                 <TreeView.Resources>
+                    <!-- Each node shows an icon for its object type (folders open while
+                         expanded) followed by its title. -->
                     <HierarchicalDataTemplate DataType="{x:Type vm:TreeNodeViewModel}" ItemsSource="{Binding Children}">
-                        <TextBlock Text="{Binding Title}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Image Width="16"
+                                   Height="16"
+                                   Margin="0,1,4,1"
+                                   VerticalAlignment="Center">
+                                <Image.Source>
+                                    <MultiBinding Converter="{StaticResource ObjectExplorerIcon}">
+                                        <Binding Path="ObjectType" />
+                                        <Binding Path="IsExpanded" />
+                                    </MultiBinding>
+                                </Image.Source>
+                            </Image>
+                            <TextBlock Text="{Binding Title}"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ObjectType}" Value="Placeholder">
+                                                <Setter Property="Foreground" Value="Gray" />
+                                                <Setter Property="FontStyle" Value="Italic" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ObjectType}" Value="Error">
+                                                <Setter Property="Foreground" Value="#FFC42B1C" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
                     </HierarchicalDataTemplate>
                 </TreeView.Resources>
                 <TreeView.ItemContainerStyle>
@@ -173,58 +218,97 @@
                           VerticalAlignment="Stretch"
                           Background="#FFE0E0E0" />
 
-            <!-- Editor over Results -->
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="2*" MinHeight="80" />
-                    <RowDefinition Height="5" />
-                    <RowDefinition Height="1*" MinHeight="60" />
-                </Grid.RowDefinitions>
+            <!-- Query tabs: a header strip above the selected tab's editor + results -->
+            <DockPanel Grid.Column="2">
 
-                <views:SqlEditorControl x:Name="SqlEditor"
-                                        Grid.Row="0"
-                                        DocumentText="{Binding EditorText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        SelectedText="{Binding SelectedText, Mode=OneWayToSource}"
-                                        CaretLine="{Binding CaretLine, Mode=OneWayToSource}"
-                                        CaretColumn="{Binding CaretColumn, Mode=OneWayToSource}" />
+                <!-- Tab strip. The TabControl is re-templated to show only the headers;
+                     the content is hosted below so each tab keeps its own live editor. -->
+                <TabControl x:Name="QueryTabStrip"
+                            DockPanel.Dock="Top"
+                            ItemsSource="{Binding Tabs}"
+                            SelectedItem="{Binding SelectedTab}"
+                            MouseUp="QueryTabStrip_MouseUp">
+                    <TabControl.Template>
+                        <ControlTemplate TargetType="TabControl">
+                            <Border BorderBrush="#FFACACAC" BorderThickness="0,0,0,1" Background="#FFF0F0F0">
+                                <TabPanel IsItemsHost="True" Margin="2,2,2,-1" />
+                            </Border>
+                        </ControlTemplate>
+                    </TabControl.Template>
 
-                <GridSplitter Grid.Row="1"
-                              Height="5"
-                              HorizontalAlignment="Stretch"
-                              VerticalAlignment="Stretch"
-                              Background="#FFE0E0E0" />
+                    <!-- Header: name (with * when modified), running indicator, close button. -->
+                    <TabControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:QueryTabViewModel}">
+                            <StackPanel Orientation="Horizontal" ToolTip="{Binding DisplayName}">
+                                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
+                                <TextBlock Text=" (executing)"
+                                           FontStyle="Italic"
+                                           Foreground="Gray"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding IsExecuting, Converter={StaticResource BooleanToVisibility}}" />
+                                <Button Content="✕"
+                                        Margin="6,0,0,0"
+                                        Padding="3,0"
+                                        FontSize="10"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Focusable="False"
+                                        ToolTip="Close (Ctrl+F4)"
+                                        Command="{Binding DataContext.CloseQueryCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
 
-                <TabControl Grid.Row="2"
-                            SelectedIndex="{Binding Results.SelectedTabIndex}">
-                    <TabItem Header="Results">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl ItemsSource="{Binding Results.ResultViews}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <DataGrid ItemsSource="{Binding}"
-                                                  AutoGenerateColumns="True"
-                                                  IsReadOnly="True"
-                                                  CanUserAddRows="False"
-                                                  CanUserDeleteRows="False"
-                                                  HeadersVisibility="Column"
-                                                  MaxHeight="400"
-                                                  Margin="0,0,0,8" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="Messages">
-                        <TextBox Text="{Binding Results.Messages, Mode=OneWay}"
-                                 IsReadOnly="True"
-                                 FontFamily="Consolas"
-                                 VerticalScrollBarVisibility="Auto"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 TextWrapping="NoWrap" />
-                    </TabItem>
+                    <!-- Right-click menu on a tab header. -->
+                    <TabControl.ItemContainerStyle>
+                        <Style TargetType="TabItem">
+                            <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}" />
+                            <Setter Property="ContextMenu">
+                                <Setter.Value>
+                                    <ContextMenu DataContext="{Binding Path=PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Save"
+                                                  Command="{Binding SaveQueryCommand}" />
+                                        <Separator />
+                                        <MenuItem Header="Close"
+                                                  InputGestureText="Ctrl+F4"
+                                                  Command="{Binding CloseQueryCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <MenuItem Header="Close All But This"
+                                                  Command="{Binding CloseOtherQueriesCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    </ContextMenu>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TabControl.ItemContainerStyle>
                 </TabControl>
-            </Grid>
+
+                <Grid>
+                    <!-- One QueryTabView per open tab, stacked; only the selected one is
+                         visible. Hidden views stay alive (undo history, caret, scroll). -->
+                    <ItemsControl ItemsSource="{Binding Tabs}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Grid />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:QueryTabViewModel}">
+                                <views:QueryTabView Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibility}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Shown when every tab has been closed. -->
+                    <TextBlock Text="No query is open. Press Ctrl+N (File → New Query) to start one."
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="Gray"
+                               Visibility="{Binding HasTabs, Converter={StaticResource InverseBooleanToVisibility}}" />
+                </Grid>
+            </DockPanel>
         </Grid>
     </DockPanel>
 </Window>

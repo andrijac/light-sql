@@ -113,7 +113,10 @@ namespace LightSQL.ViewModels
         public ConnectionProfile? Result { get; private set; }
 
         /// <summary>
-        /// Copies the selected saved connection into the form fields.
+        /// Copies the selected saved connection into the form fields. Called
+        /// automatically whenever a saved connection is selected in the list.
+        /// Raises <see cref="SavedConnectionLoaded"/> so the view can refresh its
+        /// password boxes (the password is not bindable).
         /// </summary>
         public void LoadSelected()
         {
@@ -138,6 +141,8 @@ namespace LightSQL.ViewModels
             Password = profile.Password;
 
             StatusMessage = $"Loaded '{profile.Name}'.";
+
+            SavedConnectionLoaded?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>
@@ -226,6 +231,21 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Loads a saved connection into the form as soon as it is selected, so the
+        /// user can pick a connection and press Connect straight away.
+        /// </summary>
+        /// <param name="value">The newly selected saved connection, or null.</param>
+        partial void OnSelectedSavedConnectionChanged(ConnectionProfile? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            LoadSelected();
+        }
+
+        /// <summary>
         /// Validates the current form.
         /// </summary>
         /// <param name="error">The validation error, when invalid.</param>
@@ -295,5 +315,11 @@ namespace LightSQL.ViewModels
                 Password = Password
             };
         }
+
+        /// <summary>
+        /// Raised after a saved connection has been copied into the form, so the
+        /// view can copy <see cref="Password"/> into its password boxes.
+        /// </summary>
+        public event EventHandler? SavedConnectionLoaded;
     }
 }

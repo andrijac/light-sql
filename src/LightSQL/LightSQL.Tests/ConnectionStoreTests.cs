@@ -108,6 +108,32 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public void Save_RawConnectionStringWithSavedPassword_KeepsEmbeddedPasswordEncrypted()
+        {
+            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+
+            ConnectionProfile profile = new()
+            {
+                Name = "Raw",
+                UseRawConnectionString = true,
+                RawConnectionString = "Server=localhost;User ID=sa;Password=EmbeddedSecret;",
+                SavePassword = true
+            };
+
+            store.Save(profile);
+
+            string fileContents = File.ReadAllText(filePath);
+            Assert.DoesNotContain("EmbeddedSecret", fileContents);
+
+            // After a restart the password is restored and re-injected when connecting.
+            ConnectionStore reloaded = new(new FakeCredentialProtector(), filePath);
+            ConnectionProfile loaded = Assert.Single(reloaded.GetAll());
+
+            Assert.Equal("EmbeddedSecret", loaded.Password);
+            Assert.Contains("Password=EmbeddedSecret", ConnectionStringFactory.Build(loaded));
+        }
+
+        [Fact]
         public void Delete_RemovesProfile()
         {
             ConnectionStore store = new(new FakeCredentialProtector(), filePath);

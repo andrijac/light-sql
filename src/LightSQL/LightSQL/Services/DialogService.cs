@@ -37,6 +37,36 @@ namespace LightSQL.Services
         }
 
         /// <inheritdoc />
+        public SaveChangesChoice ConfirmSaveChanges(string queryName)
+        {
+            Window? owner = GetOwner();
+            string message = $"Save changes to '{queryName}'?";
+            const string title = "LightSQL";
+
+            MessageBoxResult result = owner is null
+                ? MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes)
+                : MessageBox.Show(owner, message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
+
+            switch (result)
+            {
+                case MessageBoxResult.Yes:
+                {
+                    return SaveChangesChoice.Save;
+                }
+
+                case MessageBoxResult.No:
+                {
+                    return SaveChangesChoice.Discard;
+                }
+
+                default:
+                {
+                    return SaveChangesChoice.Cancel;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public void ShowInformation(string message, string title)
         {
             Window? owner = GetOwner();

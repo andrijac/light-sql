@@ -39,7 +39,14 @@ Access order within a group: `public` → `internal` → `protected internal` �
 
 - Unit tests use xUnit in `LightSQL.Tests`.
 - Pure logic (the UPDATE/DELETE guard, credential protection, connection-string
-  building, stores) is unit-tested without a live server.
+  building, stores, result-grid sizing, Object Explorer icon mapping) is
+  unit-tested without a live server. Tests that must load WPF XAML (e.g. checking
+  every icon key exists in `ObjectExplorerIcons.xaml`) run their work on an STA
+  thread.
+- View models (`MainViewModel` tabs, `QueryTabViewModel` execution,
+  `ConnectionDialogViewModel` saved connections) are unit-tested with in-memory
+  fakes in the test project: `FakeSqlConnectionService`, `FakeDialogService`,
+  `FakeQueryStore`, `FakeOptionsService`, `FakeConnectionStore`.
 - The SQL service is verified manually / via a temporary LocalDB smoke test against
   `(localdb)\MSSQLLocalDB` (connect, list, execute, create, metadata, drop). That
   smoke test is not part of the permanent suite.

@@ -14,7 +14,9 @@ src/LightSQL/
 │  ├─ Services/                  Infrastructure (SQL access, storage, dialogs)
 │  ├─ ViewModels/               View models (MVVM)
 │  ├─ Views/                    Windows and user controls (XAML + code-behind)
+│  ├─ Controls/                 Custom WPF controls/panels (ResultGridsPanel)
 │  ├─ Converters/               WPF value converters
+│  ├─ Resources/                Shared XAML resources (ObjectExplorerIcons.xaml)
 │  ├─ Editor/                   SqlSyntax.xshd (embedded T-SQL highlighting)
 │  ├─ App.xaml(.cs)             Entry point + DI container
 │  └─ MainWindow.xaml(.cs)      The shell window
@@ -38,40 +40,97 @@ Windows DPAPI (`System.Security.Cryptography.ProtectedData`) is provided by the
 `App.OnStartup` builds a `ServiceProvider` (see `App.xaml.cs`). Services and the
 main window are singletons; dialog view models are transient (a fresh instance per
 dialog). `MainWindow` is resolved from the container, which injects `MainViewModel`.
+Query tabs (`QueryTabViewModel`, each with its own `ResultsViewModel`) are created
+by `MainViewModel` at runtime and are not registered in the container.
 
 ## Layers
 
 - **Models** — no behaviour beyond small helpers. Enums start at `1`.
 - **Services** — all I/O and SQL access sits behind interfaces:
   - `ISqlConnectionService` / `SqlConnectionService` — connect, execute batches,
-    read metadata, create databases. Opens a fresh pooled connection per operation
-    targeting the active database (keeps execution thread-safe and the UI responsive).
+    read metadata, create databases. Opens a fresh pooled connection per operation.
+    `ExecuteBatchAsync(sql, database, token)` takes the target database explicitly
+    (null = the connection's default, `CurrentDatabase`), so each query tab runs in
+    its own database and several tabs can execute concurrently. There is no shared
+    "current database" state to mutate.
   - `IConnectionStore` / `ConnectionStore` — saved connections (JSON + DPAPI).
+    Passwords are stripped from raw connection strings before saving; when the
+    profile saves its password, the typed or embedded password is stored encrypted
+    in `ProtectedPassword` instead.
   - `IQueryStore` / `QueryStore` — named `.sql` files in the user profile.
   - `IOptionsService` / `OptionsService` — application options (JSON).
   - `ISqlStatementAnalyzer` / `SqlStatementAnalyzer` — UPDATE/DELETE-WHERE guard.
   - `ICredentialProtector` / `DpapiCredentialProtector` — DPAPI encrypt/decrypt.
   - `IDialogService` / `DialogService` — message boxes, text prompt, modal dialogs.
   - `ConnectionStringFactory` — builds connection strings from a profile.
-- **ViewModels** — `MainViewModel` orchestrates everything and implements
-  `IMainActions` so the `ObjectExplorerViewModel` can drive the editor and database
-  list without a circular dependency. `ResultsViewModel`, `TreeNodeViewModel`,
-  `ConnectionDialogViewModel`, `OptionsViewModel` support specific views.
-- **Views** — `MainWindow`, `SqlEditorControl` (wraps AvalonEdit with bindable
-  `DocumentText`, `SelectedText`, `CaretLine`, `CaretColumn`), `ConnectionDialog`,
-  `OptionsDialog`, `InputDialog`.
+- **ViewModels**
+  - `MainViewModel` — connection, database list, saved queries, options, and the
+    collection of query tabs (`Tabs`, `SelectedTab`). Tab commands: `NewQuery`,
+    `CloseQuery`, `CloseOtherQueries`, `SaveQuery`, `OpenQuery`. `ExecuteQuery` and
+    `Cancel` act on the selected tab; `ExecuteQuery` allows concurrent executions so
+    another tab can run while one is busy. `ConfirmCloseAll()` is called by the
+    window's `Closing` handler to ask about unsaved tabs. Implements `IMainActions`
+    (`OpenQueryTab`, `ExecuteAsync`, `RefreshDatabaseListAsync`) for the Object
+    Explorer without a circular dependency.
+  - `QueryTabViewModel` — one query document: `EditorText`, `SelectedText`, caret,
+    `ActiveDatabase`, `QueryName`/`DefaultTitle`/`Header`, `IsModified`,
+    `IsSelected`, `IsExecuting`, status texts, its own `ResultsViewModel` and
+    `CancellationTokenSource`. Contains the execution logic (UPDATE/DELETE guard,
+    calling the SQL service, filling results). `LoadText` sets text without marking
+    the tab modified; `IsPristine` identifies an untouched new tab.
+  - `ConnectionDialogViewModel` — the connection form and saved-connection list.
+    Selecting a saved connection (`SelectedSavedConnection`) copies it into the form
+    (`LoadSelected`) and raises `SavedConnectionLoaded`, which the dialog's
+    code-behind uses to fill its `PasswordBox`es (passwords are never bound).
+  - `ResultsViewModel`, `TreeNodeViewModel`, `ObjectExplorerViewModel`,
+    `OptionsViewModel` support specific views.
+- **Views**
+  - `MainWindow` — the shell. The query area is a `TabControl` re-templated to show
+    only the tab headers (name, *(executing)* marker, ✕ button, context menu), and
+    below it an `ItemsControl` with a `Grid` panel that holds **one `QueryTabView`
+    per tab**, only the selected one visible. A plain `TabControl` with
+    `ItemsSource` would reuse a single content view for all tabs and lose each
+    editor's undo history, caret, scroll and splitter position; keeping one live
+    view per tab avoids that.
+  - `QueryTabView` — editor over Results/Messages for one tab; focuses its editor
+    when it becomes visible.
+  - `SqlEditorControl` — wraps AvalonEdit with bindable `DocumentText`,
+    `SelectedText`, `CaretLine`, `CaretColumn`, `ShowLineNumbers`, `EditorFontSize`
+    (the last two bind to `MainViewModel.ShowLineNumbers` / `EditorFontSize`, which
+    are re-raised when Options are saved).
+  - `ConnectionDialog`, `OptionsDialog`, `InputDialog`.
+- **Controls** — `ResultGridsPanel` lays out the result grids: they fill the visible
+  results area (one grid = whole pane, several share it equally), with a minimum
+  height per grid, beyond which the panel grows and the surrounding `ScrollViewer`
+  scrolls. Inside a ScrollViewer a panel is measured with infinite height, so the
+  viewport height is bound in (`ViewportHeight`). Measuring every grid with a finite
+  height also keeps DataGrid row virtualization working. The sizing rule is the
+  static, unit-tested `CalculateItemHeight`.
+
+- **Object Explorer icons** — `Resources/ObjectExplorerIcons.xaml` (merged into
+  `App.xaml`) holds one 16×16 vector `DrawingImage` per node kind (`Icon.Server`,
+  `Icon.FolderClosed`, `Icon.FolderOpen`, `Icon.Database`, `Icon.Table`,
+  `Icon.View`, `Icon.Column`, `Icon.Loading`, `Icon.Error`); vectors stay sharp at
+  any DPI and need no image files. The tree's item template binds an `Image` to
+  `ObjectType` + `IsExpanded` through `ObjectExplorerIconConverter`, whose static,
+  unit-tested `GetIconKey` maps a node kind to its icon key (folders switch to the
+  open icon while expanded). The "Loading..." and error child nodes have their own
+  `DatabaseObjectType` values (`Placeholder`, `Error`) so they get their own icon
+  and text style.
 
 ## Threading / responsiveness
 
 All database calls are `async`. The Object Explorer loads each level lazily on
-expand. Query execution runs under a `CancellationTokenSource` so the Cancel button
-can abort a long query.
+expand. Each query tab executes under its own `CancellationTokenSource`, so Cancel
+aborts only that tab's query and tabs can run in parallel.
 
 ## Known limitations (v1)
 
 - Each batch runs on its own pooled connection, so session state such as `USE`,
-  `#temp` tables and `SET` options does not persist between executions. Use the
-  toolbar **Database** dropdown to change the active database.
+  `#temp` tables and `SET` options does not persist between executions (not even
+  within the same tab). Use the toolbar **Database** dropdown to change the selected
+  tab's database.
+- Open tabs are not restored after restarting the application.
 - Dropping a database that has active/pooled connections fails with a SQL error
   (standard SQL Server behaviour); close other usage first.
 - Object scripting ("Script as CREATE") is not implemented yet.

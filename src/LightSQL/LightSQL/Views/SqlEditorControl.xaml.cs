@@ -51,6 +51,24 @@ namespace LightSQL.Views
             new PropertyMetadata(1));
 
         /// <summary>
+        /// Backing property for whether line numbers are shown (bindable to options).
+        /// </summary>
+        public static readonly DependencyProperty ShowLineNumbersProperty = DependencyProperty.Register(
+            nameof(ShowLineNumbers),
+            typeof(bool),
+            typeof(SqlEditorControl),
+            new PropertyMetadata(true, OnShowLineNumbersChanged));
+
+        /// <summary>
+        /// Backing property for the editor font size in points (bindable to options).
+        /// </summary>
+        public static readonly DependencyProperty EditorFontSizeProperty = DependencyProperty.Register(
+            nameof(EditorFontSize),
+            typeof(double),
+            typeof(SqlEditorControl),
+            new PropertyMetadata(13d, OnEditorFontSizeChanged));
+
+        /// <summary>
         /// Guards against feedback loops while syncing the editor and the DP.
         /// </summary>
         private bool isUpdatingDocumentText;
@@ -134,23 +152,34 @@ namespace LightSQL.Views
         }
 
         /// <summary>
-        /// Sets whether line numbers are shown.
+        /// Whether line numbers are shown.
         /// </summary>
-        /// <param name="show">True to show line numbers.</param>
-        public void SetShowLineNumbers(bool show)
+        public bool ShowLineNumbers
         {
-            Editor.ShowLineNumbers = show;
+            get
+            {
+                return (bool)GetValue(ShowLineNumbersProperty);
+            }
+
+            set
+            {
+                SetValue(ShowLineNumbersProperty, value);
+            }
         }
 
         /// <summary>
-        /// Sets the editor font size in points.
+        /// The editor font size in points. Values of zero or less are ignored.
         /// </summary>
-        /// <param name="fontSize">The font size.</param>
-        public void SetFontSize(double fontSize)
+        public double EditorFontSize
         {
-            if (fontSize > 0d)
+            get
             {
-                Editor.FontSize = fontSize;
+                return (double)GetValue(EditorFontSizeProperty);
+            }
+
+            set
+            {
+                SetValue(EditorFontSizeProperty, value);
             }
         }
 
@@ -160,6 +189,30 @@ namespace LightSQL.Views
         public void FocusEditor()
         {
             Editor.Focus();
+        }
+
+        /// <summary>
+        /// Applies the ShowLineNumbers DP to the editor.
+        /// </summary>
+        private static void OnShowLineNumbersChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            SqlEditorControl control = (SqlEditorControl)d;
+
+            control.Editor.ShowLineNumbers = (bool)e.NewValue;
+        }
+
+        /// <summary>
+        /// Applies the EditorFontSize DP to the editor, ignoring invalid sizes.
+        /// </summary>
+        private static void OnEditorFontSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            SqlEditorControl control = (SqlEditorControl)d;
+            double fontSize = (double)e.NewValue;
+
+            if (fontSize > 0d)
+            {
+                control.Editor.FontSize = fontSize;
+            }
         }
 
         /// <summary>
