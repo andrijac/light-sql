@@ -507,6 +507,73 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public async Task SwitchingTabs_SelectedTabShowsItsOwnDatabase()
+        {
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+            QueryTabViewModel first = viewModel.SelectedTab!;
+            first.ActiveDatabase = "Sales";
+            viewModel.NewQueryCommand.Execute(null);
+            QueryTabViewModel second = viewModel.SelectedTab!;
+            second.ActiveDatabase = "HR";
+
+            viewModel.SelectedTab = first;
+            Assert.Equal("Sales", viewModel.SelectedTab.ActiveDatabase);
+
+            viewModel.SelectedTab = second;
+            Assert.Equal("HR", viewModel.SelectedTab.ActiveDatabase);
+        }
+
+        [Fact]
+        public async Task TabDatabaseMissingFromList_IsAddedInSortedPosition()
+        {
+            sqlService.DatabaseNames.Clear();
+            sqlService.DatabaseNames.AddRange(new[] { "HR", "master", "Sales" });
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+
+            // E.g. a database created after the list was loaded, reached with USE.
+            viewModel.SelectedTab!.ActiveDatabase = "Inventory";
+
+            Assert.Equal(new[] { "HR", "Inventory", "master", "Sales" }, viewModel.Databases);
+            Assert.Equal("Inventory", viewModel.SelectedTab.ActiveDatabase);
+        }
+
+        [Fact]
+        public async Task TabDatabaseDifferingOnlyInCase_UsesListedSpelling()
+        {
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+
+            viewModel.SelectedTab!.ActiveDatabase = "sales";
+
+            Assert.Equal("Sales", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Single(viewModel.Databases, name => string.Equals(name, "Sales", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task Execute_UseInBatch_ChangesOnlyThatTabDatabase()
+        {
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+            QueryTabViewModel first = viewModel.SelectedTab!;
+            viewModel.NewQueryCommand.Execute(null);
+            QueryTabViewModel second = viewModel.SelectedTab!;
+            second.EditorText = "USE HR;";
+            sqlService.ExecuteHandler = (sql, database, token) =>
+            {
+                QueryExecutionResult result = FakeSqlConnectionService.CreateResult(0);
+                result.NewDatabaseContext = "HR";
+
+                return Task.FromResult(result);
+            };
+
+            await viewModel.ExecuteQueryCommand.ExecuteAsync(null);
+
+            Assert.Equal("HR", second.ActiveDatabase);
+            Assert.Equal("master", first.ActiveDatabase);
+
+            viewModel.SelectedTab = first;
+            Assert.Equal("master", viewModel.SelectedTab.ActiveDatabase);
+        }
+
+        [Fact]
         public async Task Connect_GivesOpenTabsTheDefaultDatabase()
         {
             MainViewModel viewModel = CreateViewModel();

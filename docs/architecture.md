@@ -52,7 +52,11 @@ by `MainViewModel` at runtime and are not registered in the container.
     `ExecuteBatchAsync(sql, database, token)` takes the target database explicitly
     (null = the connection's default, `CurrentDatabase`), so each query tab runs in
     its own database and several tabs can execute concurrently. There is no shared
-    "current database" state to mutate.
+    "current database" state to mutate. After a batch it compares
+    `SqlConnection.Database` with the database it started in (read in a `finally`,
+    so it also works when the batch failed) and reports a `USE` switch in
+    `QueryExecutionResult.NewDatabaseContext` (static, unit-tested
+    `GetNewDatabaseContext`).
   - `IConnectionStore` / `ConnectionStore` — saved connections (JSON + DPAPI).
     Passwords are stripped from raw connection strings before saving; when the
     profile saves its password, the typed or embedded password is stored encrypted
@@ -79,14 +83,19 @@ by `MainViewModel` at runtime and are not registered in the container.
     another tab can run while one is busy. `ConfirmCloseAll()` is called by the
     window's `Closing` handler to ask about unsaved tabs. Implements `IMainActions`
     (`OpenQueryTab`, `ExecuteAsync`, `RefreshDatabaseListAsync`) for the Object
-    Explorer without a circular dependency.
+    Explorer without a circular dependency. The toolbar dropdown binds
+    `SelectedItem` to `SelectedTab.ActiveDatabase`, so it follows the selected tab.
+    A `ComboBox` cannot select a value that is not in its items and then keeps
+    showing the previous selection, so `MainViewModel` watches every tab's
+    `ActiveDatabase` and adds a missing name to `Databases` (sorted, matched
+    case-insensitively; a different-case spelling is replaced by the listed one).
   - `QueryTabViewModel` — one query document: `EditorText`, `SelectedText`, caret,
     `ActiveDatabase`, `FilePath` + `FileEncoding` (null until the tab is opened from
     or saved to a file), `DefaultTitle`/`DisplayName` (file name)/`Header`/`ToolTip`
     (full path)/`SuggestedFileName`, `IsModified`, `IsSelected`, `IsExecuting`,
     status texts, its own `ResultsViewModel` and `CancellationTokenSource`. Contains
     the execution logic (UPDATE/DELETE guard, calling the SQL service, filling
-    results). `LoadText` sets generated text (no file) and `LoadFile` sets a file's
+    results, switching `ActiveDatabase` when the batch ran `USE`). `LoadText` sets generated text (no file) and `LoadFile` sets a file's
     text, both without marking the tab modified; `MarkSaved` records a save;
     `IsPristine` identifies an untouched new tab.
   - `ConnectionDialogViewModel` — the connection form and saved-connection list.
@@ -137,10 +146,11 @@ aborts only that tab's query and tabs can run in parallel.
 
 ## Known limitations (v1)
 
-- Each batch runs on its own pooled connection, so session state such as `USE`,
-  `#temp` tables and `SET` options does not persist between executions (not even
-  within the same tab). Use the toolbar **Database** dropdown to change the selected
-  tab's database.
+- Each batch runs on its own pooled connection, so session state such as `#temp`
+  tables and `SET` options does not persist between executions (not even within
+  the same tab). `USE` is the exception: the tab adopts the database the batch
+  switched to, and the next batch is opened in it. The toolbar **Database**
+  dropdown also changes the selected tab's database.
 - Open tabs are not restored after restarting the application.
 - Dropping a database that has active/pooled connections fails with a SQL error
   (standard SQL Server behaviour); close other usage first.

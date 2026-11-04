@@ -278,6 +278,13 @@ namespace LightSQL.ViewModels
                 Results.Load(result);
                 ElapsedText = $"{result.Elapsed.TotalMilliseconds:N0} ms";
 
+                // Follow a USE in the batch, like SSMS: the tab (and the toolbar
+                // dropdown) now shows that database and the next execution runs there.
+                if (result.NewDatabaseContext is not null)
+                {
+                    ActiveDatabase = result.NewDatabaseContext;
+                }
+
                 if (result.TotalRows > 0)
                 {
                     RowCountText = $"{result.TotalRows} row(s)";

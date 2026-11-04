@@ -36,6 +36,13 @@ namespace LightSQL.Models
         public bool IsSuccess { get; set; }
 
         /// <summary>
+        /// The database the batch switched to (e.g. with <c>USE Sales</c>), or null
+        /// when it ended in the same database it started in. Set even when a later
+        /// statement failed, because the switch still happened on the server.
+        /// </summary>
+        public string? NewDatabaseContext { get; set; }
+
+        /// <summary>
         /// Total number of rows across all returned result sets.
         /// </summary>
         public int TotalRows

@@ -118,26 +118,39 @@ namespace LightSQL.Services
 
                 await connection.OpenAsync(cancellationToken);
 
-                await using SqlCommand command = new(sql, connection)
-                {
-                    CommandTimeout = 0
-                };
+                // The database the batch starts in; compared afterwards to detect USE.
+                string startDatabase = connection.Database;
 
-                await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-
-                do
+                try
                 {
-                    if (reader.FieldCount > 0)
+                    await using SqlCommand command = new(sql, connection)
                     {
-                        DataTable table = await ReadResultSetAsync(reader, cancellationToken);
-                        result.ResultTables.Add(table);
-                    }
-                }
-                while (await reader.NextResultAsync(cancellationToken));
+                        CommandTimeout = 0
+                    };
 
-                int affected = reader.RecordsAffected;
-                result.RecordsAffected = affected < 0 ? 0 : affected;
-                result.IsSuccess = true;
+                    await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+                    do
+                    {
+                        if (reader.FieldCount > 0)
+                        {
+                            DataTable table = await ReadResultSetAsync(reader, cancellationToken);
+                            result.ResultTables.Add(table);
+                        }
+                    }
+                    while (await reader.NextResultAsync(cancellationToken));
+
+                    int affected = reader.RecordsAffected;
+                    result.RecordsAffected = affected < 0 ? 0 : affected;
+                    result.IsSuccess = true;
+                }
+                finally
+                {
+                    // SqlConnection.Database follows USE statements. Read it here, while
+                    // the connection is still open, so a switch is reported even when a
+                    // later statement in the batch failed.
+                    result.NewDatabaseContext = GetNewDatabaseContext(startDatabase, connection.Database);
+                }
 
                 if (result.ResultTables.Count == 0)
                 {
@@ -284,6 +297,28 @@ namespace LightSQL.Services
 
             await using SqlCommand command = new(sql, connection);
             await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Works out whether a batch changed its database context (e.g. with USE).
+        /// </summary>
+        /// <param name="startDatabase">The connection's database before the batch.</param>
+        /// <param name="endDatabase">The connection's database after the batch.</param>
+        /// <returns>The new database, or null when it did not change.</returns>
+        public static string? GetNewDatabaseContext(string? startDatabase, string? endDatabase)
+        {
+            if (string.IsNullOrWhiteSpace(endDatabase) == true)
+            {
+                return null;
+            }
+
+            // Database names are compared case-insensitively, as on a default-collation server.
+            if (string.Equals(startDatabase, endDatabase, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return null;
+            }
+
+            return endDatabase;
         }
 
         /// <summary>

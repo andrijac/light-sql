@@ -49,6 +49,9 @@ Access order within a group: `public` → `internal` → `protected internal` �
   `FakeFileService` (in-memory files), `FakeOptionsService`, `FakeConnectionStore`.
 - `FileService` encoding detection and byte-for-byte round-trips are tested
   against real temporary files.
+- `SqlConnectionService.GetNewDatabaseContext` (detecting a `USE` switch) is
+  unit-tested; that `SqlConnection.Database` follows `USE` (also in a failed batch)
+  was verified once against LocalDB.
 - The SQL service is verified manually / via a temporary LocalDB smoke test against
   `(localdb)\MSSQLLocalDB` (connect, list, execute, create, metadata, drop). That
   smoke test is not part of the permanent suite.

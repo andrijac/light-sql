@@ -64,11 +64,21 @@ otherwise you must enter it again next time.
 ## Active database
 
 The toolbar **Database** dropdown lists the server's databases and selects the one
-used for execution **by the selected tab** — each tab remembers its own database.
-Tabs opened from the Object Explorer use the node's database. On connect, tabs
-without a database get the server's default; refreshing the list keeps each tab's
-database (falling back to the default if it no longer exists). Disconnecting keeps
-the tabs open but clears their database.
+used for execution **by the selected tab** — each tab remembers its own database,
+and switching tabs re-selects that tab's database in the dropdown. Tabs opened from
+the Object Explorer use the node's database. On connect, tabs without a database
+get the server's default; refreshing the list keeps each tab's database (falling
+back to the default if it no longer exists). Disconnecting keeps the tabs open but
+clears their database.
+
+- **`USE` follows the query, like SSMS:** executing a batch that contains
+  `USE Sales` switches that tab (and the dropdown) to `Sales`, and later executions
+  in the tab run there. This also happens when a statement after the `USE` fails,
+  because the switch already took place on the server. Other tabs are not affected.
+- A tab's database that is missing from the dropdown list (e.g. created by a query
+  after the list was loaded) is added to the list, in name order, so the dropdown
+  can always show it. Names are matched case-insensitively and shown with the
+  server's spelling.
 
 ## Writing and running queries
 

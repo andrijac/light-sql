@@ -149,12 +149,7 @@ namespace LightSQL.ViewModels
         /// <inheritdoc />
         public void OpenQueryTab(string? database, string sql)
         {
-            if (string.IsNullOrWhiteSpace(database) == false && Databases.Contains(database) == false)
-            {
-                Databases.Add(database);
-            }
-
-            AddTab(database, sql);
+            AddTab(EnsureDatabaseListed(database), sql);
         }
 
         /// <summary>
@@ -700,7 +695,46 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Re-evaluates the Execute/Cancel buttons when a tab starts or stops executing.
+        /// Adds a database to the toolbar dropdown list when it is missing, keeping the
+        /// list sorted by name. A tab can be in a database the list does not know yet
+        /// (created after the list was loaded, or reached with USE); without this the
+        /// dropdown cannot select it and keeps showing the previous tab's database.
+        /// </summary>
+        /// <param name="database">The database name, or null.</param>
+        /// <returns>
+        /// The name as it appears in the list (the listed spelling when it differs only
+        /// in case), or null when no database was given.
+        /// </returns>
+        private string? EnsureDatabaseListed(string? database)
+        {
+            if (string.IsNullOrWhiteSpace(database) == true)
+            {
+                return null;
+            }
+
+            string? listed = Databases.FirstOrDefault(name => string.Equals(name, database, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (listed is not null)
+            {
+                return listed;
+            }
+
+            int index = 0;
+
+            while (index < Databases.Count && string.Compare(Databases[index], database, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                index++;
+            }
+
+            Databases.Insert(index, database);
+
+            return database;
+        }
+
+        /// <summary>
+        /// Re-evaluates the Execute/Cancel buttons when a tab starts or stops executing,
+        /// and makes sure a tab's new database is in the dropdown list so the dropdown
+        /// can show it.
         /// </summary>
         private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -708,6 +742,19 @@ namespace LightSQL.ViewModels
             {
                 ExecuteQueryCommand.NotifyCanExecuteChanged();
                 CancelCommand.NotifyCanExecuteChanged();
+            }
+
+            if (e.PropertyName == nameof(QueryTabViewModel.ActiveDatabase) && sender is QueryTabViewModel tab)
+            {
+                string? listed = EnsureDatabaseListed(tab.ActiveDatabase);
+
+                // The dropdown matches names exactly, so use the listed spelling
+                // ("sales" from a USE becomes "Sales"). Setting it raises this handler
+                // once more, which then finds the names equal and stops.
+                if (listed is not null && string.Equals(listed, tab.ActiveDatabase, StringComparison.Ordinal) == false)
+                {
+                    tab.ActiveDatabase = listed;
+                }
             }
         }
 

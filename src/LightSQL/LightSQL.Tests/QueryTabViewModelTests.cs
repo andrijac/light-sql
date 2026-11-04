@@ -124,6 +124,60 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public async Task Execute_BatchSwitchesDatabase_TabFollowsIt()
+        {
+            QueryTabViewModel tab = CreateTab();
+            tab.ActiveDatabase = "master";
+            tab.EditorText = "USE Sales;";
+            sqlService.ExecuteHandler = (sql, database, token) =>
+            {
+                QueryExecutionResult result = FakeSqlConnectionService.CreateResult(0);
+                result.NewDatabaseContext = "Sales";
+
+                return Task.FromResult(result);
+            };
+
+            await tab.ExecuteAsync();
+            await tab.ExecuteAsync();
+
+            Assert.Equal("Sales", tab.ActiveDatabase);
+
+            // The second execution runs in the database the first one switched to.
+            Assert.Equal("Sales", sqlService.ExecutedBatches[1].Database);
+        }
+
+        [Fact]
+        public async Task Execute_FailedBatchThatSwitchedDatabase_StillFollowsIt()
+        {
+            QueryTabViewModel tab = CreateTab();
+            tab.ActiveDatabase = "master";
+            tab.EditorText = "USE Sales; SELECT * FROM Missing;";
+            sqlService.ExecuteHandler = (sql, database, token) =>
+            {
+                QueryExecutionResult result = new() { IsSuccess = false, NewDatabaseContext = "Sales" };
+
+                return Task.FromResult(result);
+            };
+
+            await tab.ExecuteAsync();
+
+            Assert.Equal("Sales", tab.ActiveDatabase);
+            Assert.Equal("Query completed with errors", tab.ExecutionStatus);
+        }
+
+        [Fact]
+        public async Task Execute_BatchWithoutUse_KeepsTabDatabase()
+        {
+            QueryTabViewModel tab = CreateTab();
+            tab.ActiveDatabase = "HR";
+            tab.EditorText = "SELECT 1";
+
+            await tab.ExecuteAsync();
+
+            Assert.Equal("HR", tab.ActiveDatabase);
+        }
+
+        [Fact]
         public async Task Execute_PrefersSelectedText()
         {
             QueryTabViewModel tab = CreateTab();
