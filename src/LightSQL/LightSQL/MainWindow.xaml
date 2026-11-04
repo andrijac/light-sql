@@ -8,6 +8,9 @@
         Height="700"
         Width="1100"
         WindowStartupLocation="CenterScreen"
+        AllowDrop="True"
+        PreviewDragOver="OnWindowPreviewDragOver"
+        PreviewDrop="OnWindowPreviewDrop"
         Closing="OnWindowClosing">
 
     <Window.Resources>
@@ -19,7 +22,9 @@
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding ExecuteQueryCommand}" />
         <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewQueryCommand}" />
-        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveQueryCommand}" />
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenFileCommand}" />
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveFileCommand}" />
+        <KeyBinding Key="S" Modifiers="Control+Shift" Command="{Binding SaveFileAsCommand}" />
         <KeyBinding Key="F4" Modifiers="Control" Command="{Binding CloseQueryCommand}" />
     </Window.InputBindings>
 
@@ -29,18 +34,12 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Query" InputGestureText="Ctrl+N" Command="{Binding NewQueryCommand}" />
-                <MenuItem Header="_Open Query" ItemsSource="{Binding SavedQueries}">
-                    <MenuItem.ItemContainerStyle>
-                        <Style TargetType="MenuItem">
-                            <Setter Property="Header" Value="{Binding Name}" />
-                            <Setter Property="Command" Value="{Binding DataContext.OpenQueryCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
-                            <Setter Property="CommandParameter" Value="{Binding}" />
-                        </Style>
-                    </MenuItem.ItemContainerStyle>
-                </MenuItem>
-                <MenuItem Header="_Save Query" InputGestureText="Ctrl+S" Command="{Binding SaveQueryCommand}" />
-                <MenuItem Header="_Close Query" InputGestureText="Ctrl+F4" Command="{Binding CloseQueryCommand}" />
-                <MenuItem Header="_Refresh Saved Queries" Command="{Binding RefreshSavedQueriesCommand}" />
+                <MenuItem Header="_Open File..." InputGestureText="Ctrl+O" Command="{Binding OpenFileCommand}" />
+                <Separator />
+                <MenuItem Header="_Save" InputGestureText="Ctrl+S" Command="{Binding SaveFileCommand}" />
+                <MenuItem Header="Save _As..." InputGestureText="Ctrl+Shift+S" Command="{Binding SaveFileAsCommand}" />
+                <Separator />
+                <MenuItem Header="_Close" InputGestureText="Ctrl+F4" Command="{Binding CloseQueryCommand}" />
                 <Separator />
                 <MenuItem Header="E_xit" Click="ExitMenu_Click" />
             </MenuItem>
@@ -100,9 +99,12 @@
                         Command="{Binding CancelCommand}"
                         ToolTip="Cancel the running query" />
                 <Separator />
-                <Button Content="Save Query"
-                        Command="{Binding SaveQueryCommand}"
-                        ToolTip="Save the query to your personal folder" />
+                <Button Content="Open"
+                        Command="{Binding OpenFileCommand}"
+                        ToolTip="Open a .sql file (Ctrl+O)" />
+                <Button Content="Save"
+                        Command="{Binding SaveFileCommand}"
+                        ToolTip="Save the query to its file (Ctrl+S)" />
             </ToolBar>
         </ToolBarTray>
 
@@ -239,7 +241,7 @@
                     <!-- Header: name (with * when modified), running indicator, close button. -->
                     <TabControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:QueryTabViewModel}">
-                            <StackPanel Orientation="Horizontal" ToolTip="{Binding DisplayName}">
+                            <StackPanel Orientation="Horizontal" ToolTip="{Binding ToolTip}">
                                 <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
                                 <TextBlock Text=" (executing)"
                                            FontStyle="Italic"
@@ -269,7 +271,12 @@
                                 <Setter.Value>
                                     <ContextMenu DataContext="{Binding Path=PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
                                         <MenuItem Header="Save"
-                                                  Command="{Binding SaveQueryCommand}" />
+                                                  InputGestureText="Ctrl+S"
+                                                  Command="{Binding SaveFileCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <MenuItem Header="Save As..."
+                                                  Command="{Binding SaveFileAsCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                         <Separator />
                                         <MenuItem Header="Close"
                                                   InputGestureText="Ctrl+F4"
@@ -302,7 +309,7 @@
                     </ItemsControl>
 
                     <!-- Shown when every tab has been closed. -->
-                    <TextBlock Text="No query is open. Press Ctrl+N (File → New Query) to start one."
+                    <TextBlock Text="No query is open. Press Ctrl+N for a new query or Ctrl+O to open a file."
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Foreground="Gray"

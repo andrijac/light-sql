@@ -1,3 +1,5 @@
+using System.IO;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightSQL.Models;
 using LightSQL.Services;
@@ -46,8 +48,9 @@ namespace LightSQL.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(DisplayName))]
         [NotifyPropertyChangedFor(nameof(Header))]
+        [NotifyPropertyChangedFor(nameof(ToolTip))]
         [NotifyPropertyChangedFor(nameof(IsPristine))]
-        private string? queryName;
+        private string? filePath;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(Header))]
@@ -81,7 +84,7 @@ namespace LightSQL.ViewModels
         /// <param name="statementAnalyzer">Analyzer for the UPDATE/DELETE guard.</param>
         /// <param name="optionsService">Application options.</param>
         /// <param name="dialogService">User prompts and dialogs.</param>
-        /// <param name="defaultTitle">Title used until the query is saved, e.g. "SQLQuery1".</param>
+        /// <param name="defaultTitle">Title used until the query is saved to a file, e.g. "SQLQuery1".</param>
         public QueryTabViewModel(
             ISqlConnectionService sqlService,
             ISqlStatementAnalyzer statementAnalyzer,
@@ -98,9 +101,15 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// The title used while the query has not been saved (e.g. "SQLQuery1").
+        /// The title used while the query has not been saved to a file (e.g. "SQLQuery1").
         /// </summary>
         public string DefaultTitle { get; }
+
+        /// <summary>
+        /// The encoding of the tab's file, used when saving it back; null for a tab
+        /// that has no file yet (it is saved in the default encoding).
+        /// </summary>
+        public Encoding? FileEncoding { get; private set; }
 
         /// <summary>
         /// The results and messages of the last execution in this tab.
@@ -108,13 +117,37 @@ namespace LightSQL.ViewModels
         public ResultsViewModel Results { get; } = new();
 
         /// <summary>
-        /// The saved query name, or the default title when not saved yet.
+        /// The file name (e.g. "report.sql"), or the default title when the query has
+        /// no file yet.
         /// </summary>
         public string DisplayName
         {
             get
             {
-                return QueryName ?? DefaultTitle;
+                return FilePath is null ? DefaultTitle : Path.GetFileName(FilePath);
+            }
+        }
+
+        /// <summary>
+        /// The tab header tooltip: the full file path, or the default title.
+        /// </summary>
+        public string ToolTip
+        {
+            get
+            {
+                return FilePath ?? DefaultTitle;
+            }
+        }
+
+        /// <summary>
+        /// The file name proposed by Save As: the current file name, or the default
+        /// title with a ".sql" extension (e.g. "SQLQuery1.sql").
+        /// </summary>
+        public string SuggestedFileName
+        {
+            get
+            {
+                return FilePath is null ? DefaultTitle + ".sql" : Path.GetFileName(FilePath);
             }
         }
 
@@ -130,47 +163,53 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// True for an untouched new query (no name, no text, no changes). Such a tab
-        /// can be reused when opening a saved query instead of adding another tab.
+        /// True for an untouched new query (no file, no text, no changes). Such a tab
+        /// can be reused when opening a file instead of adding another tab.
         /// </summary>
         public bool IsPristine
         {
             get
             {
-                return QueryName is null && IsModified == false && string.IsNullOrEmpty(EditorText) == true;
+                return FilePath is null && IsModified == false && string.IsNullOrEmpty(EditorText) == true;
             }
         }
 
         /// <summary>
-        /// Replaces the editor text without marking the tab as modified (used when
-        /// opening a saved query or generating a script).
+        /// Replaces the editor text without marking the tab as modified and without
+        /// linking it to a file (used for generated scripts, e.g. "Select Top 1000").
         /// </summary>
         /// <param name="sql">The SQL to show.</param>
-        /// <param name="name">The saved query name, or null for an unsaved query.</param>
-        public void LoadText(string sql, string? name)
+        public void LoadText(string sql)
         {
-            isLoadingText = true;
+            SetTextWithoutModifying(sql);
 
-            try
-            {
-                EditorText = sql;
-            }
-            finally
-            {
-                isLoadingText = false;
-            }
-
-            QueryName = name;
             IsModified = false;
         }
 
         /// <summary>
-        /// Records that the tab's text was saved under the given name.
+        /// Shows a file's text in the tab and links the tab to that file, without
+        /// marking it as modified.
         /// </summary>
-        /// <param name="name">The name the query was saved as.</param>
-        public void MarkSaved(string name)
+        /// <param name="path">The full path of the opened file.</param>
+        /// <param name="content">The file's text and encoding.</param>
+        public void LoadFile(string path, TextFileContent content)
         {
-            QueryName = name;
+            SetTextWithoutModifying(content.Text);
+
+            FileEncoding = content.Encoding;
+            FilePath = path;
+            IsModified = false;
+        }
+
+        /// <summary>
+        /// Records that the tab's text was saved to the given file.
+        /// </summary>
+        /// <param name="path">The full path of the file written.</param>
+        /// <param name="encoding">The encoding the file was written with.</param>
+        public void MarkSaved(string path, Encoding encoding)
+        {
+            FileEncoding = encoding;
+            FilePath = path;
             IsModified = false;
         }
 
@@ -265,6 +304,24 @@ namespace LightSQL.ViewModels
                 executionCancellation?.Dispose();
                 executionCancellation = null;
                 IsExecuting = false;
+            }
+        }
+
+        /// <summary>
+        /// Sets the editor text without the change counting as a user edit.
+        /// </summary>
+        /// <param name="text">The text to show.</param>
+        private void SetTextWithoutModifying(string text)
+        {
+            isLoadingText = true;
+
+            try
+            {
+                EditorText = text;
+            }
+            finally
+            {
+                isLoadingText = false;
             }
         }
 

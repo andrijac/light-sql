@@ -35,6 +35,26 @@ namespace LightSQL.Tests
         public string? PromptResult { get; set; }
 
         /// <summary>
+        /// The paths returned by <see cref="ShowOpenFileDialog"/> (empty simulates Cancel).
+        /// </summary>
+        public List<string> OpenFileResult { get; } = new();
+
+        /// <summary>
+        /// The initial folders passed to <see cref="ShowOpenFileDialog"/>, in order.
+        /// </summary>
+        public List<string?> OpenFileDirectories { get; } = new();
+
+        /// <summary>
+        /// The path returned by <see cref="ShowSaveFileDialog"/> (null simulates Cancel).
+        /// </summary>
+        public string? SaveFileResult { get; set; }
+
+        /// <summary>
+        /// The suggested names and initial folders passed to <see cref="ShowSaveFileDialog"/>, in order.
+        /// </summary>
+        public List<(string SuggestedFileName, string? InitialDirectory)> SaveFilePrompts { get; } = new();
+
+        /// <summary>
         /// How many times <see cref="ShowInformation"/> was called.
         /// </summary>
         public int InformationCount { get; private set; }
@@ -63,6 +83,22 @@ namespace LightSQL.Tests
             SaveChangesPrompts.Add(queryName);
 
             return SaveChangesResult;
+        }
+
+        /// <inheritdoc />
+        public IReadOnlyList<string> ShowOpenFileDialog(string? initialDirectory)
+        {
+            OpenFileDirectories.Add(initialDirectory);
+
+            return OpenFileResult.ToList();
+        }
+
+        /// <inheritdoc />
+        public string? ShowSaveFileDialog(string suggestedFileName, string? initialDirectory)
+        {
+            SaveFilePrompts.Add((suggestedFileName, initialDirectory));
+
+            return SaveFileResult;
         }
 
         /// <inheritdoc />

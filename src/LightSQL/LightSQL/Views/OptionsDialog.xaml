@@ -16,24 +16,6 @@
                       Margin="4,8" />
         </GroupBox>
 
-        <GroupBox Header="Saved queries" Margin="0,8,0,0">
-            <Grid Margin="4,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <TextBox Grid.Column="0"
-                         Text="{Binding QueriesFolder, UpdateSourceTrigger=PropertyChanged}"
-                         VerticalAlignment="Center" />
-                <Button Grid.Column="1"
-                        Content="Browse..."
-                        Width="90"
-                        Margin="8,0,0,0"
-                        Command="{Binding BrowseQueriesFolderCommand}" />
-            </Grid>
-        </GroupBox>
-
         <GroupBox Header="Editor" Margin="0,8,0,0">
             <StackPanel Margin="4,8">
                 <CheckBox Content="Show line numbers"

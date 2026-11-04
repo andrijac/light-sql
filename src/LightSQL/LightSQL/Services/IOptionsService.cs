@@ -23,12 +23,5 @@ namespace LightSQL.Services
         /// </summary>
         /// <param name="options">The options to save.</param>
         void Save(AppOptions options);
-
-        /// <summary>
-        /// Resolves the effective queries folder, falling back to the default when
-        /// the configured value is empty, and ensures the folder exists.
-        /// </summary>
-        /// <returns>The absolute path of the queries folder.</returns>
-        string ResolveQueriesFolder();
     }
 }

@@ -20,9 +20,26 @@ namespace LightSQL.Services
         /// <summary>
         /// Asks whether to save a query that has unsaved changes before closing it.
         /// </summary>
-        /// <param name="queryName">The display name of the query.</param>
+        /// <param name="queryName">The display name of the query (its file name).</param>
         /// <returns>Save, Discard (don't save) or Cancel (keep it open).</returns>
         SaveChangesChoice ConfirmSaveChanges(string queryName);
+
+        /// <summary>
+        /// Shows the standard "Open" file dialog for SQL files. Several files can be
+        /// selected at once.
+        /// </summary>
+        /// <param name="initialDirectory">The folder to start in, or null to let Windows decide.</param>
+        /// <returns>The selected file paths; empty when cancelled.</returns>
+        IReadOnlyList<string> ShowOpenFileDialog(string? initialDirectory);
+
+        /// <summary>
+        /// Shows the standard "Save As" file dialog for a SQL file. Windows asks
+        /// before overwriting an existing file.
+        /// </summary>
+        /// <param name="suggestedFileName">The file name proposed in the dialog.</param>
+        /// <param name="initialDirectory">The folder to start in, or null to let Windows decide.</param>
+        /// <returns>The chosen file path, or null when cancelled.</returns>
+        string? ShowSaveFileDialog(string suggestedFileName, string? initialDirectory);
 
         /// <summary>
         /// Shows an informational message.

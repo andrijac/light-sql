@@ -92,17 +92,5 @@ namespace LightSQL.Services
 
             current = options;
         }
-
-        /// <inheritdoc />
-        public string ResolveQueriesFolder()
-        {
-            string folder = string.IsNullOrWhiteSpace(current.QueriesFolder) == true
-                ? AppPaths.DefaultQueriesFolder
-                : current.QueriesFolder;
-
-            AppPaths.EnsureDirectory(folder);
-
-            return folder;
-        }
     }
 }

@@ -57,27 +57,38 @@ by `MainViewModel` at runtime and are not registered in the container.
     Passwords are stripped from raw connection strings before saving; when the
     profile saves its password, the typed or embedded password is stored encrypted
     in `ProtectedPassword` instead.
-  - `IQueryStore` / `QueryStore` — named `.sql` files in the user profile.
+  - `IFileService` / `FileService` — reads and writes the `.sql` files open in
+    tabs. `ReadText` returns a `TextFileContent` (text + detected encoding: byte
+    order mark, else strict UTF-8, else the Windows ANSI code page); `WriteText`
+    writes with a given encoding so files round-trip unchanged. `DefaultEncoding`
+    (UTF-8 with BOM, like SSMS) is used for new files.
   - `IOptionsService` / `OptionsService` — application options (JSON).
   - `ISqlStatementAnalyzer` / `SqlStatementAnalyzer` — UPDATE/DELETE-WHERE guard.
   - `ICredentialProtector` / `DpapiCredentialProtector` — DPAPI encrypt/decrypt.
-  - `IDialogService` / `DialogService` — message boxes, text prompt, modal dialogs.
+  - `IDialogService` / `DialogService` — message boxes, text prompt, the Windows
+    Open (multi-select) / Save As file dialogs, modal dialogs.
   - `ConnectionStringFactory` — builds connection strings from a profile.
 - **ViewModels**
-  - `MainViewModel` — connection, database list, saved queries, options, and the
-    collection of query tabs (`Tabs`, `SelectedTab`). Tab commands: `NewQuery`,
-    `CloseQuery`, `CloseOtherQueries`, `SaveQuery`, `OpenQuery`. `ExecuteQuery` and
+  - `MainViewModel` — connection, database list, options, and the collection of
+    query tabs (`Tabs`, `SelectedTab`). Tab commands: `NewQuery`, `OpenFile`,
+    `SaveFile`, `SaveFileAs` (both take an optional tab, default the selected one),
+    `CloseQuery`, `CloseOtherQueries`. `OpenFiles(paths)` is also used by window
+    drag-and-drop and command-line arguments (`App.OnStartup`). It remembers the
+    folder of the last file opened/saved for the next dialog. `ExecuteQuery` and
     `Cancel` act on the selected tab; `ExecuteQuery` allows concurrent executions so
     another tab can run while one is busy. `ConfirmCloseAll()` is called by the
     window's `Closing` handler to ask about unsaved tabs. Implements `IMainActions`
     (`OpenQueryTab`, `ExecuteAsync`, `RefreshDatabaseListAsync`) for the Object
     Explorer without a circular dependency.
   - `QueryTabViewModel` — one query document: `EditorText`, `SelectedText`, caret,
-    `ActiveDatabase`, `QueryName`/`DefaultTitle`/`Header`, `IsModified`,
-    `IsSelected`, `IsExecuting`, status texts, its own `ResultsViewModel` and
-    `CancellationTokenSource`. Contains the execution logic (UPDATE/DELETE guard,
-    calling the SQL service, filling results). `LoadText` sets text without marking
-    the tab modified; `IsPristine` identifies an untouched new tab.
+    `ActiveDatabase`, `FilePath` + `FileEncoding` (null until the tab is opened from
+    or saved to a file), `DefaultTitle`/`DisplayName` (file name)/`Header`/`ToolTip`
+    (full path)/`SuggestedFileName`, `IsModified`, `IsSelected`, `IsExecuting`,
+    status texts, its own `ResultsViewModel` and `CancellationTokenSource`. Contains
+    the execution logic (UPDATE/DELETE guard, calling the SQL service, filling
+    results). `LoadText` sets generated text (no file) and `LoadFile` sets a file's
+    text, both without marking the tab modified; `MarkSaved` records a save;
+    `IsPristine` identifies an untouched new tab.
   - `ConnectionDialogViewModel` — the connection form and saved-connection list.
     Selecting a saved connection (`SelectedSavedConnection`) copies it into the form
     (`LoadSelected`) and raises `SavedConnectionLoaded`, which the dialog's

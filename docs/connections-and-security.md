@@ -6,7 +6,10 @@
 |---|---|
 | Application options | `%APPDATA%\LightSQL\options.json` |
 | Saved connections | `%APPDATA%\LightSQL\connections.json` |
-| Saved queries | `%USERPROFILE%\LightSQL\Queries\*.sql` (configurable in Options) |
+| Query scripts | Wherever you save them — ordinary `.sql` files chosen with **File → Save As** |
+
+Query files are plain text: don't put passwords or connection strings with
+credentials in them.
 
 ## Credential handling
 

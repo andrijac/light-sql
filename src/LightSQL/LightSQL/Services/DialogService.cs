@@ -1,19 +1,32 @@
+using System.IO;
 using System.Windows;
 using LightSQL.Models;
 using LightSQL.ViewModels;
 using LightSQL.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 
 namespace LightSQL.Services
 {
     /// <summary>
     /// WPF implementation of <see cref="IDialogService"/> using standard message
-    /// boxes, the reusable <see cref="InputDialog"/>, and the application's modal
-    /// dialog windows resolved from the service provider.
+    /// boxes, the standard Windows Open / Save As file dialogs, the reusable
+    /// <see cref="InputDialog"/>, and the application's modal dialog windows resolved
+    /// from the service provider.
     /// </summary>
     public sealed class DialogService : IDialogService
     {
         private readonly IServiceProvider serviceProvider;
+
+        /// <summary>
+        /// File-type filter of the Open / Save As dialogs.
+        /// </summary>
+        private const string SqlFileFilter = "SQL files (*.sql)|*.sql|Text files (*.txt)|*.txt|All files (*.*)|*.*";
+
+        /// <summary>
+        /// Extension added to a file name typed without one in Save As.
+        /// </summary>
+        private const string SqlFileExtension = ".sql";
 
         /// <summary>
         /// Creates the dialog service.
@@ -64,6 +77,61 @@ namespace LightSQL.Services
                     return SaveChangesChoice.Cancel;
                 }
             }
+        }
+
+        /// <inheritdoc />
+        public IReadOnlyList<string> ShowOpenFileDialog(string? initialDirectory)
+        {
+            OpenFileDialog dialog = new()
+            {
+                Title = "Open File",
+                Filter = SqlFileFilter,
+                DefaultExt = SqlFileExtension,
+                Multiselect = true,
+                CheckFileExists = true
+            };
+
+            if (string.IsNullOrWhiteSpace(initialDirectory) == false && Directory.Exists(initialDirectory) == true)
+            {
+                dialog.InitialDirectory = initialDirectory;
+            }
+
+            bool? result = ShowCommonDialog(dialog);
+
+            if (result == true)
+            {
+                return dialog.FileNames;
+            }
+
+            return Array.Empty<string>();
+        }
+
+        /// <inheritdoc />
+        public string? ShowSaveFileDialog(string suggestedFileName, string? initialDirectory)
+        {
+            SaveFileDialog dialog = new()
+            {
+                Title = "Save File As",
+                Filter = SqlFileFilter,
+                DefaultExt = SqlFileExtension,
+                AddExtension = true,
+                OverwritePrompt = true,
+                FileName = suggestedFileName
+            };
+
+            if (string.IsNullOrWhiteSpace(initialDirectory) == false && Directory.Exists(initialDirectory) == true)
+            {
+                dialog.InitialDirectory = initialDirectory;
+            }
+
+            bool? result = ShowCommonDialog(dialog);
+
+            if (result == true)
+            {
+                return dialog.FileName;
+            }
+
+            return null;
         }
 
         /// <inheritdoc />
@@ -147,6 +215,23 @@ namespace LightSQL.Services
             dialog.ShowDialog();
 
             return viewModel.Saved;
+        }
+
+        /// <summary>
+        /// Shows a Windows common dialog, owned by the main window when there is one.
+        /// </summary>
+        /// <param name="dialog">The dialog to show.</param>
+        /// <returns>The dialog result.</returns>
+        private static bool? ShowCommonDialog(CommonDialog dialog)
+        {
+            Window? owner = GetOwner();
+
+            if (owner is null)
+            {
+                return dialog.ShowDialog();
+            }
+
+            return dialog.ShowDialog(owner);
         }
 
         /// <summary>

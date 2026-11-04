@@ -22,11 +22,5 @@ namespace LightSQL.Tests
         {
             Current = options;
         }
-
-        /// <inheritdoc />
-        public string ResolveQueriesFolder()
-        {
-            return "memory";
-        }
     }
 }

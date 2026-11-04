@@ -1,3 +1,4 @@
+using System.Text;
 using LightSQL.Models;
 using LightSQL.Services;
 using LightSQL.ViewModels;
@@ -38,27 +39,69 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public void LoadText_DoesNotMarkModified_AndUsesSavedName()
+        public void LoadText_DoesNotMarkModified_AndHasNoFile()
         {
             QueryTabViewModel tab = CreateTab();
 
-            tab.LoadText("SELECT 1", "daily-report");
+            tab.LoadText("SELECT 1");
 
             Assert.Equal("SELECT 1", tab.EditorText);
             Assert.False(tab.IsModified);
-            Assert.Equal("daily-report", tab.Header);
+            Assert.Null(tab.FilePath);
+            Assert.Equal("SQLQuery1", tab.Header);
         }
 
         [Fact]
-        public void MarkSaved_ClearsModified_AndRenames()
+        public void LoadFile_ShowsFileName_KeepsEncoding_AndIsNotModified()
+        {
+            QueryTabViewModel tab = CreateTab();
+            Encoding encoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+
+            tab.LoadFile(@"C:\Scripts\daily-report.sql", new TextFileContent("SELECT 1", encoding));
+
+            Assert.Equal("SELECT 1", tab.EditorText);
+            Assert.False(tab.IsModified);
+            Assert.False(tab.IsPristine);
+            Assert.Equal(@"C:\Scripts\daily-report.sql", tab.FilePath);
+            Assert.Equal("daily-report.sql", tab.Header);
+            Assert.Equal(@"C:\Scripts\daily-report.sql", tab.ToolTip);
+            Assert.Same(encoding, tab.FileEncoding);
+        }
+
+        [Fact]
+        public void SuggestedFileName_UsesDefaultTitle_UntilSaved()
+        {
+            QueryTabViewModel tab = CreateTab();
+
+            Assert.Equal("SQLQuery1.sql", tab.SuggestedFileName);
+
+            tab.MarkSaved(@"C:\Scripts\orders.sql", Encoding.UTF8);
+
+            Assert.Equal("orders.sql", tab.SuggestedFileName);
+        }
+
+        [Fact]
+        public void MarkSaved_ClearsModified_AndShowsFileName()
         {
             QueryTabViewModel tab = CreateTab();
             tab.EditorText = "SELECT 1";
 
-            tab.MarkSaved("saved-name");
+            tab.MarkSaved(@"C:\Scripts\saved.sql", Encoding.UTF8);
 
             Assert.False(tab.IsModified);
-            Assert.Equal("saved-name", tab.Header);
+            Assert.Equal("saved.sql", tab.Header);
+            Assert.Equal(@"C:\Scripts\saved.sql", tab.FilePath);
+        }
+
+        [Fact]
+        public void EditingFile_AddsMarkerToFileName()
+        {
+            QueryTabViewModel tab = CreateTab();
+            tab.LoadFile(@"C:\Scripts\report.sql", new TextFileContent("SELECT 1", Encoding.UTF8));
+
+            tab.EditorText = "SELECT 2";
+
+            Assert.Equal("report.sql *", tab.Header);
         }
 
         [Fact]

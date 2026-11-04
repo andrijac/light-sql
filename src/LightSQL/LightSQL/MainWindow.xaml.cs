@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -56,6 +57,37 @@ namespace LightSQL
                 viewModel.CloseQueryCommand.Execute(tab);
                 e.Handled = true;
             }
+        }
+
+        /// <summary>
+        /// Shows the "copy" cursor while files are dragged over the window. Handled in
+        /// the preview phase so the SQL editor does not treat dropped files as text.
+        /// </summary>
+        private void OnWindowPreviewDragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) == false)
+            {
+                return;
+            }
+
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// Opens files dropped anywhere on the window in query tabs.
+        /// </summary>
+        private void OnWindowPreviewDrop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            // Ignore dropped folders; only files can be opened.
+            viewModel.OpenFiles(paths.Where(path => Directory.Exists(path) == false));
         }
 
         /// <summary>

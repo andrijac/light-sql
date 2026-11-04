@@ -1,9 +1,6 @@
-using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
 using LightSQL.Services;
-using Microsoft.Win32;
 
 namespace LightSQL.ViewModels
 {
@@ -17,9 +14,6 @@ namespace LightSQL.ViewModels
 
         [ObservableProperty]
         private bool warnOnUpdateDeleteWithoutWhere;
-
-        [ObservableProperty]
-        private string queriesFolder = string.Empty;
 
         [ObservableProperty]
         private bool showLineNumbers;
@@ -38,9 +32,6 @@ namespace LightSQL.ViewModels
             AppOptions options = optionsService.Current;
 
             warnOnUpdateDeleteWithoutWhere = options.WarnOnUpdateDeleteWithoutWhere;
-            queriesFolder = string.IsNullOrWhiteSpace(options.QueriesFolder) == true
-                ? AppPaths.DefaultQueriesFolder
-                : options.QueriesFolder;
             showLineNumbers = options.ShowLineNumbers;
             editorFontSize = options.EditorFontSize;
         }
@@ -51,29 +42,6 @@ namespace LightSQL.ViewModels
         public bool Saved { get; private set; }
 
         /// <summary>
-        /// Lets the user pick the queries folder.
-        /// </summary>
-        [RelayCommand]
-        private void BrowseQueriesFolder()
-        {
-            OpenFolderDialog dialog = new()
-            {
-                Title = "Select queries folder",
-                Multiselect = false
-            };
-
-            if (string.IsNullOrWhiteSpace(QueriesFolder) == false && Directory.Exists(QueriesFolder) == true)
-            {
-                dialog.InitialDirectory = QueriesFolder;
-            }
-
-            if (dialog.ShowDialog() == true)
-            {
-                QueriesFolder = dialog.FolderName;
-            }
-        }
-
-        /// <summary>
         /// Persists the edited options.
         /// </summary>
         public void Save()
@@ -81,7 +49,6 @@ namespace LightSQL.ViewModels
             AppOptions options = new()
             {
                 WarnOnUpdateDeleteWithoutWhere = WarnOnUpdateDeleteWithoutWhere,
-                QueriesFolder = QueriesFolder,
                 ShowLineNumbers = ShowLineNumbers,
                 EditorFontSize = EditorFontSize
             };

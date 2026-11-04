@@ -12,12 +12,6 @@ namespace LightSQL.Models
         public bool WarnOnUpdateDeleteWithoutWhere { get; set; } = true;
 
         /// <summary>
-        /// Folder where named queries are saved. Defaults to
-        /// "%USERPROFILE%\LightSQL\Queries" (resolved by the options service when empty).
-        /// </summary>
-        public string QueriesFolder { get; set; } = string.Empty;
-
-        /// <summary>
         /// Whether the editor shows line numbers. Defaults to true.
         /// </summary>
         public bool ShowLineNumbers { get; set; } = true;

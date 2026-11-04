@@ -1,3 +1,4 @@
+using System.Text;
 using LightSQL.Models;
 using LightSQL.Services;
 using LightSQL.ViewModels;
@@ -7,14 +8,14 @@ namespace LightSQL.Tests
 {
     /// <summary>
     /// Tests the SSMS-style query tabs managed by <see cref="MainViewModel"/>: opening,
-    /// closing (with save prompts), opening saved queries, per-tab databases and
+    /// closing (with save prompts), File Open / Save / Save As, per-tab databases and
     /// independent execution.
     /// </summary>
     public class MainViewModelTests
     {
         private readonly FakeSqlConnectionService sqlService = new();
         private readonly FakeDialogService dialogService = new();
-        private readonly FakeQueryStore queryStore = new();
+        private readonly FakeFileService fileService = new();
         private readonly FakeOptionsService optionsService = new();
 
         [Fact]
@@ -111,37 +112,50 @@ namespace LightSQL.Tests
             viewModel.CloseQueryCommand.Execute(tab);
 
             Assert.Empty(viewModel.Tabs);
-            Assert.Empty(queryStore.Queries);
+            Assert.Empty(fileService.Files);
         }
 
         [Fact]
-        public void CloseQuery_ModifiedTab_Save_SavesThenCloses()
+        public void CloseQuery_ModifiedNewTab_Save_AsksForFileThenCloses()
         {
             MainViewModel viewModel = CreateViewModel();
             QueryTabViewModel tab = viewModel.Tabs[0];
             tab.EditorText = "SELECT 42";
             dialogService.SaveChangesResult = SaveChangesChoice.Save;
-            dialogService.PromptResult = "answer";
+            dialogService.SaveFileResult = @"C:\Scripts\answer.sql";
 
             viewModel.CloseQueryCommand.Execute(tab);
 
             Assert.Empty(viewModel.Tabs);
-            Assert.Equal("SELECT 42", queryStore.Queries["answer"]);
-            Assert.Contains(viewModel.SavedQueries, query => query.Name == "answer");
+            Assert.Equal("SELECT 42", fileService.Files[@"C:\Scripts\answer.sql"].Text);
         }
 
         [Fact]
-        public void CloseQuery_ModifiedTab_SaveNameCancelled_KeepsTab()
+        public void CloseQuery_ModifiedTab_SaveAsCancelled_KeepsTab()
         {
             MainViewModel viewModel = CreateViewModel();
             QueryTabViewModel tab = viewModel.Tabs[0];
             tab.EditorText = "SELECT 42";
             dialogService.SaveChangesResult = SaveChangesChoice.Save;
-            dialogService.PromptResult = null;
+            dialogService.SaveFileResult = null;
 
             viewModel.CloseQueryCommand.Execute(tab);
 
             Assert.Contains(tab, viewModel.Tabs);
+            Assert.True(tab.IsModified);
+        }
+
+        [Fact]
+        public void CloseQuery_ModifiedFile_PromptUsesFileName()
+        {
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
+            viewModel.SelectedTab!.EditorText = "SELECT 2";
+
+            viewModel.CloseQueryCommand.Execute(null);
+
+            Assert.Equal(new[] { "report.sql" }, dialogService.SaveChangesPrompts);
         }
 
         [Fact]
@@ -155,7 +169,8 @@ namespace LightSQL.Tests
             Assert.Null(viewModel.SelectedTab);
             Assert.False(viewModel.HasTabs);
             Assert.False(viewModel.ExecuteQueryCommand.CanExecute(null));
-            Assert.False(viewModel.SaveQueryCommand.CanExecute(null));
+            Assert.False(viewModel.SaveFileCommand.CanExecute(null));
+            Assert.False(viewModel.SaveFileAsCommand.CanExecute(null));
         }
 
         [Fact]
@@ -187,61 +202,189 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public void OpenQuery_ReusesPristineSelectedTab()
+        public void OpenFile_ReusesPristineSelectedTab()
         {
-            queryStore.Save("report", "SELECT * FROM Report");
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT * FROM Report");
+            dialogService.OpenFileResult.Add(@"C:\Scripts\report.sql");
             MainViewModel viewModel = CreateViewModel();
 
-            viewModel.OpenQueryCommand.Execute(viewModel.SavedQueries[0]);
+            viewModel.OpenFileCommand.Execute(null);
 
             QueryTabViewModel tab = Assert.Single(viewModel.Tabs);
-            Assert.Equal("report", tab.Header);
+            Assert.Equal("report.sql", tab.Header);
+            Assert.Equal(@"C:\Scripts\report.sql", tab.FilePath);
             Assert.Equal("SELECT * FROM Report", tab.EditorText);
             Assert.False(tab.IsModified);
         }
 
         [Fact]
-        public void OpenQuery_WhenSelectedTabHasText_OpensNewTab()
+        public void OpenFile_WhenSelectedTabHasText_OpensNewTab()
         {
-            queryStore.Save("report", "SELECT * FROM Report");
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT * FROM Report");
+            dialogService.OpenFileResult.Add(@"C:\Scripts\report.sql");
             MainViewModel viewModel = CreateViewModel();
             viewModel.Tabs[0].EditorText = "SELECT 1";
 
-            viewModel.OpenQueryCommand.Execute(viewModel.SavedQueries[0]);
+            viewModel.OpenFileCommand.Execute(null);
 
             Assert.Equal(2, viewModel.Tabs.Count);
-            Assert.Equal("report", viewModel.SelectedTab!.Header);
+            Assert.Equal("report.sql", viewModel.SelectedTab!.Header);
             Assert.Equal("SELECT 1", viewModel.Tabs[0].EditorText);
         }
 
         [Fact]
-        public void OpenQuery_AlreadyOpen_ActivatesExistingTab()
+        public void OpenFile_SeveralFiles_OpensOneTabEach()
         {
-            queryStore.Save("report", "SELECT * FROM Report");
+            fileService.AddFile(@"C:\Scripts\a.sql", "SELECT 'a'");
+            fileService.AddFile(@"C:\Scripts\b.sql", "SELECT 'b'");
+            dialogService.OpenFileResult.AddRange(new[] { @"C:\Scripts\a.sql", @"C:\Scripts\b.sql" });
             MainViewModel viewModel = CreateViewModel();
-            viewModel.OpenQueryCommand.Execute(viewModel.SavedQueries[0]);
+
+            viewModel.OpenFileCommand.Execute(null);
+
+            Assert.Equal(new[] { "a.sql", "b.sql" }, viewModel.Tabs.Select(tab => tab.Header));
+            Assert.Equal("b.sql", viewModel.SelectedTab!.Header);
+        }
+
+        [Fact]
+        public void OpenFile_AlreadyOpen_ActivatesExistingTab()
+        {
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT * FROM Report");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
             QueryTabViewModel reportTab = viewModel.SelectedTab!;
             viewModel.NewQueryCommand.Execute(null);
 
-            viewModel.OpenQueryCommand.Execute(viewModel.SavedQueries[0]);
+            // Same file, different letter case: still the same file on Windows.
+            viewModel.OpenFiles(new[] { @"c:\scripts\REPORT.sql" });
 
             Assert.Equal(2, viewModel.Tabs.Count);
             Assert.Same(reportTab, viewModel.SelectedTab);
         }
 
         [Fact]
-        public void SaveQuery_SavesSelectedTab_AndRenamesIt()
+        public void OpenFile_Cancelled_ChangesNothing()
+        {
+            MainViewModel viewModel = CreateViewModel();
+
+            viewModel.OpenFileCommand.Execute(null);
+
+            QueryTabViewModel tab = Assert.Single(viewModel.Tabs);
+            Assert.Null(tab.FilePath);
+            Assert.Equal(0, dialogService.ErrorCount);
+        }
+
+        [Fact]
+        public void OpenFile_UnreadableFile_ShowsError_AndOpensNoTab()
+        {
+            dialogService.OpenFileResult.Add(@"C:\Scripts\missing.sql");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.Tabs[0].EditorText = "SELECT 1";
+
+            viewModel.OpenFileCommand.Execute(null);
+
+            Assert.Equal(1, dialogService.ErrorCount);
+            Assert.Single(viewModel.Tabs);
+        }
+
+        [Fact]
+        public void OpenFile_DialogStartsInFolderOfLastFile()
+        {
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
+            viewModel.NewQueryCommand.Execute(null);
+
+            viewModel.OpenFileCommand.Execute(null);
+
+            Assert.Equal(@"C:\Scripts", dialogService.OpenFileDirectories.Last());
+        }
+
+        [Fact]
+        public void SaveFile_NewTab_AsksForFileName_AndLinksTabToFile()
         {
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
             viewModel.SelectedTab!.EditorText = "SELECT 2";
-            dialogService.PromptResult = "second";
+            dialogService.SaveFileResult = @"C:\Scripts\second.sql";
 
-            viewModel.SaveQueryCommand.Execute(null);
+            viewModel.SaveFileCommand.Execute(null);
 
-            Assert.Equal("SELECT 2", queryStore.Queries["second"]);
-            Assert.Equal("second", viewModel.SelectedTab.Header);
+            (string suggested, string? _) = Assert.Single(dialogService.SaveFilePrompts);
+            Assert.Equal("SQLQuery2.sql", suggested);
+            Assert.Equal("SELECT 2", fileService.Files[@"C:\Scripts\second.sql"].Text);
+            Assert.Same(fileService.DefaultEncoding, fileService.Files[@"C:\Scripts\second.sql"].Encoding);
+            Assert.Equal("second.sql", viewModel.SelectedTab.Header);
+            Assert.False(viewModel.SelectedTab.IsModified);
             Assert.Equal("SQLQuery1", viewModel.Tabs[0].Header);
+        }
+
+        [Fact]
+        public void SaveFile_OpenedFile_OverwritesWithoutDialog_AndKeepsEncoding()
+        {
+            Encoding utf16 = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1", utf16);
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
+            viewModel.SelectedTab!.EditorText = "SELECT 2";
+
+            viewModel.SaveFileCommand.Execute(null);
+
+            Assert.Empty(dialogService.SaveFilePrompts);
+            Assert.Equal("SELECT 2", fileService.Files[@"C:\Scripts\report.sql"].Text);
+            Assert.Same(utf16, fileService.Files[@"C:\Scripts\report.sql"].Encoding);
+            Assert.False(viewModel.SelectedTab.IsModified);
+        }
+
+        [Fact]
+        public void SaveFileAs_WritesNewFile_AndSwitchesTabToIt()
+        {
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
+            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            dialogService.SaveFileResult = @"C:\Archive\report-v2.sql";
+
+            viewModel.SaveFileAsCommand.Execute(null);
+
+            Assert.Equal(("report.sql", (string?)@"C:\Scripts"), Assert.Single(dialogService.SaveFilePrompts));
+            Assert.Equal("SELECT 1", fileService.Files[@"C:\Scripts\report.sql"].Text);
+            Assert.Equal("SELECT 2", fileService.Files[@"C:\Archive\report-v2.sql"].Text);
+            Assert.Equal(@"C:\Archive\report-v2.sql", viewModel.SelectedTab.FilePath);
+            Assert.Equal("report-v2.sql", viewModel.SelectedTab.Header);
+        }
+
+        [Fact]
+        public void SaveFile_GivenTab_SavesThatTabNotTheSelectedOne()
+        {
+            fileService.AddFile(@"C:\Scripts\a.sql", "SELECT 'a'");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\a.sql" });
+            QueryTabViewModel fileTab = viewModel.SelectedTab!;
+            fileTab.EditorText = "SELECT 'changed'";
+            viewModel.NewQueryCommand.Execute(null);
+
+            viewModel.SaveFileCommand.Execute(fileTab);
+
+            Assert.Equal("SELECT 'changed'", fileService.Files[@"C:\Scripts\a.sql"].Text);
+            Assert.False(fileTab.IsModified);
+            Assert.Empty(dialogService.SaveFilePrompts);
+        }
+
+        [Fact]
+        public void SaveFile_WriteFails_ShowsError_AndKeepsTabModified()
+        {
+            fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
+            MainViewModel viewModel = CreateViewModel();
+            viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
+            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            fileService.WriteFailure = new UnauthorizedAccessException("Access denied.");
+
+            viewModel.SaveFileCommand.Execute(null);
+
+            Assert.Equal(1, dialogService.ErrorCount);
+            Assert.True(viewModel.SelectedTab.IsModified);
+            Assert.Equal("SELECT 1", fileService.Files[@"C:\Scripts\report.sql"].Text);
         }
 
         [Fact]
@@ -425,7 +568,7 @@ namespace LightSQL.Tests
             return new MainViewModel(
                 sqlService,
                 new SqlStatementAnalyzer(),
-                queryStore,
+                fileService,
                 optionsService,
                 dialogService,
                 objectExplorer);

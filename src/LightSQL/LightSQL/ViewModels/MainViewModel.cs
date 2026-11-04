@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
@@ -9,15 +11,22 @@ namespace LightSQL.ViewModels
 {
     /// <summary>
     /// The main window's view model. Orchestrates the connection, the query tabs
-    /// (SSMS-style documents), saved queries, options and the Object Explorer.
+    /// (SSMS-style documents backed by .sql files: New, Open, Save, Save As),
+    /// options and the Object Explorer.
     /// </summary>
     public partial class MainViewModel : ObservableObject, IMainActions
     {
         private readonly ISqlConnectionService sqlService;
         private readonly ISqlStatementAnalyzer statementAnalyzer;
-        private readonly IQueryStore queryStore;
+        private readonly IFileService fileService;
         private readonly IOptionsService optionsService;
         private readonly IDialogService dialogService;
+
+        /// <summary>
+        /// The folder of the last file opened or saved, offered first by the next
+        /// Open / Save As dialog for a tab that has no file of its own.
+        /// </summary>
+        private string? lastFileDirectory;
 
         /// <summary>
         /// Number used for the next default tab title ("SQLQuery{n}"). Never reused,
@@ -33,7 +42,8 @@ namespace LightSQL.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(ExecuteQueryCommand))]
         [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
-        [NotifyCanExecuteChangedFor(nameof(SaveQueryCommand))]
+        [NotifyCanExecuteChangedFor(nameof(SaveFileCommand))]
+        [NotifyCanExecuteChangedFor(nameof(SaveFileAsCommand))]
         private QueryTabViewModel? selectedTab;
 
         [ObservableProperty]
@@ -52,31 +62,29 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <param name="sqlService">SQL Server connection/execution service.</param>
         /// <param name="statementAnalyzer">Analyzer for the UPDATE/DELETE guard.</param>
-        /// <param name="queryStore">Store for saved queries.</param>
+        /// <param name="fileService">Reads and writes .sql files.</param>
         /// <param name="optionsService">Application options.</param>
         /// <param name="dialogService">User prompts and dialogs.</param>
         /// <param name="objectExplorer">The Object Explorer view model.</param>
         public MainViewModel(
             ISqlConnectionService sqlService,
             ISqlStatementAnalyzer statementAnalyzer,
-            IQueryStore queryStore,
+            IFileService fileService,
             IOptionsService optionsService,
             IDialogService dialogService,
             ObjectExplorerViewModel objectExplorer)
         {
             this.sqlService = sqlService;
             this.statementAnalyzer = statementAnalyzer;
-            this.queryStore = queryStore;
+            this.fileService = fileService;
             this.optionsService = optionsService;
             this.dialogService = dialogService;
 
             ObjectExplorer = objectExplorer;
             ObjectExplorer.MainActions = this;
 
-            RefreshSavedQueries();
-
             // Start with one empty query, like SSMS's "New Query".
-            AddTab(null, string.Empty, null);
+            AddTab(null, string.Empty);
         }
 
         /// <summary>
@@ -93,11 +101,6 @@ namespace LightSQL.ViewModels
         /// The databases available on the connected server (toolbar dropdown).
         /// </summary>
         public ObservableCollection<string> Databases { get; } = new();
-
-        /// <summary>
-        /// The saved queries available to open.
-        /// </summary>
-        public ObservableCollection<SavedQuery> SavedQueries { get; } = new();
 
         /// <summary>
         /// Whether at least one query tab is open.
@@ -151,7 +154,23 @@ namespace LightSQL.ViewModels
                 Databases.Add(database);
             }
 
-            AddTab(database, sql, null);
+            AddTab(database, sql);
+        }
+
+        /// <summary>
+        /// Opens files in query tabs (from the Open dialog, files dropped on the
+        /// window, or files passed on the command line). A file that
+        /// is already open has its tab activated; the first file reuses the selected
+        /// tab when it is an untouched new query; other files get new tabs. A file that
+        /// cannot be read is reported and skipped.
+        /// </summary>
+        /// <param name="paths">The full paths of the files to open.</param>
+        public void OpenFiles(IEnumerable<string> paths)
+        {
+            foreach (string path in paths)
+            {
+                OpenSingleFile(path);
+            }
         }
 
         /// <inheritdoc />
@@ -321,8 +340,51 @@ namespace LightSQL.ViewModels
                 database = sqlService.CurrentDatabase;
             }
 
-            AddTab(database, string.Empty, null);
+            AddTab(database, string.Empty);
             StatusMessage = "New query";
+        }
+
+        /// <summary>
+        /// Shows the Open dialog and opens the chosen .sql files in tabs (File → Open).
+        /// </summary>
+        [RelayCommand]
+        private void OpenFile()
+        {
+            IReadOnlyList<string> paths = dialogService.ShowOpenFileDialog(GetDialogDirectory(SelectedTab));
+
+            OpenFiles(paths);
+        }
+
+        /// <summary>
+        /// Saves a tab to its file, or asks for a file name when it has none yet
+        /// (File → Save).
+        /// </summary>
+        /// <param name="tab">The tab to save, or null for the selected tab.</param>
+        [RelayCommand(CanExecute = nameof(HasSelectedTab))]
+        private void SaveFile(QueryTabViewModel? tab)
+        {
+            QueryTabViewModel? target = tab ?? SelectedTab;
+
+            if (target is not null)
+            {
+                SaveTab(target);
+            }
+        }
+
+        /// <summary>
+        /// Saves a tab to a new file chosen in the Save As dialog (File → Save As).
+        /// The tab then refers to the new file.
+        /// </summary>
+        /// <param name="tab">The tab to save, or null for the selected tab.</param>
+        [RelayCommand(CanExecute = nameof(HasSelectedTab))]
+        private void SaveFileAs(QueryTabViewModel? tab)
+        {
+            QueryTabViewModel? target = tab ?? SelectedTab;
+
+            if (target is not null)
+            {
+                SaveTabAs(target);
+            }
         }
 
         /// <summary>
@@ -382,81 +444,6 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Saves the selected tab's text under a name in the personal folder.
-        /// </summary>
-        [RelayCommand(CanExecute = nameof(HasSelectedTab))]
-        private void SaveQuery()
-        {
-            if (SelectedTab is not null)
-            {
-                SaveTab(SelectedTab);
-            }
-        }
-
-        /// <summary>
-        /// Opens a saved query. Activates its tab when it is already open, reuses the
-        /// selected tab when it is an untouched new query, and otherwise opens a new tab.
-        /// </summary>
-        /// <param name="query">The saved query to open.</param>
-        [RelayCommand]
-        private void OpenQuery(SavedQuery? query)
-        {
-            if (query is null)
-            {
-                return;
-            }
-
-            QueryTabViewModel? existing = Tabs.FirstOrDefault(
-                tab => string.Equals(tab.QueryName, query.Name, StringComparison.OrdinalIgnoreCase) == true);
-
-            if (existing is not null)
-            {
-                SelectedTab = existing;
-                StatusMessage = $"'{query.Name}' is already open";
-
-                return;
-            }
-
-            string content;
-
-            try
-            {
-                content = queryStore.ReadContent(query.Name);
-            }
-            catch (Exception ex)
-            {
-                dialogService.ShowError(ex.Message, "Open Query");
-
-                return;
-            }
-
-            if (SelectedTab is not null && SelectedTab.IsPristine == true)
-            {
-                SelectedTab.LoadText(content, query.Name);
-            }
-            else
-            {
-                AddTab(SelectedTab?.ActiveDatabase, content, query.Name);
-            }
-
-            StatusMessage = $"Opened '{query.Name}'";
-        }
-
-        /// <summary>
-        /// Reloads the list of saved queries from the personal folder.
-        /// </summary>
-        [RelayCommand]
-        private void RefreshSavedQueries()
-        {
-            SavedQueries.Clear();
-
-            foreach (SavedQuery query in queryStore.GetAll())
-            {
-                SavedQueries.Add(query);
-            }
-        }
-
-        /// <summary>
         /// Shows the Options dialog and re-applies editor settings to all tabs when saved.
         /// </summary>
         [RelayCommand]
@@ -496,9 +483,8 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <param name="database">The tab's database, or null.</param>
         /// <param name="sql">The initial SQL text.</param>
-        /// <param name="name">The saved query name, or null for a new query.</param>
         /// <returns>The new tab.</returns>
-        private QueryTabViewModel AddTab(string? database, string sql, string? name)
+        private QueryTabViewModel AddTab(string? database, string sql)
         {
             QueryTabViewModel tab = new(
                 sqlService,
@@ -510,7 +496,7 @@ namespace LightSQL.ViewModels
             nextQueryNumber++;
 
             tab.ActiveDatabase = string.IsNullOrWhiteSpace(database) == true ? null : database;
-            tab.LoadText(sql, name);
+            tab.LoadText(sql);
             tab.PropertyChanged += OnTabPropertyChanged;
 
             Tabs.Add(tab);
@@ -584,38 +570,133 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Prompts for a name and saves a tab's text to the personal folder.
+        /// Opens one file: activates its tab when already open, otherwise reads it into
+        /// the selected tab (when that is an untouched new query) or a new tab.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        private void OpenSingleFile(string path)
+        {
+            string fullPath;
+
+            try
+            {
+                fullPath = Path.GetFullPath(path);
+            }
+            catch (Exception ex)
+            {
+                dialogService.ShowError($"Could not open '{path}'.\n\n{ex.Message}", "Open File");
+
+                return;
+            }
+
+            QueryTabViewModel? existing = Tabs.FirstOrDefault(
+                tab => tab.FilePath is not null && string.Equals(tab.FilePath, fullPath, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (existing is not null)
+            {
+                SelectedTab = existing;
+                StatusMessage = $"'{existing.DisplayName}' is already open";
+
+                return;
+            }
+
+            TextFileContent content;
+
+            try
+            {
+                content = fileService.ReadText(fullPath);
+            }
+            catch (Exception ex)
+            {
+                dialogService.ShowError($"Could not open '{fullPath}'.\n\n{ex.Message}", "Open File");
+
+                return;
+            }
+
+            QueryTabViewModel target = SelectedTab is not null && SelectedTab.IsPristine == true
+                ? SelectedTab
+                : AddTab(SelectedTab?.ActiveDatabase, string.Empty);
+
+            target.LoadFile(fullPath, content);
+            lastFileDirectory = Path.GetDirectoryName(fullPath);
+            StatusMessage = $"Opened '{target.DisplayName}'";
+        }
+
+        /// <summary>
+        /// Saves a tab to its file, or via Save As when it has no file yet.
         /// </summary>
         /// <param name="tab">The tab to save.</param>
         /// <returns>True when saved; false when cancelled or failed.</returns>
         private bool SaveTab(QueryTabViewModel tab)
         {
-            string? name = dialogService.PromptForText(
-                "Save Query",
-                "Query name:",
-                tab.QueryName ?? string.Empty,
-                candidate => queryStore.IsValidName(candidate));
+            if (tab.FilePath is null)
+            {
+                return SaveTabAs(tab);
+            }
 
-            if (name is null)
+            return WriteTab(tab, tab.FilePath);
+        }
+
+        /// <summary>
+        /// Asks for a file name and saves a tab to it.
+        /// </summary>
+        /// <param name="tab">The tab to save.</param>
+        /// <returns>True when saved; false when cancelled or failed.</returns>
+        private bool SaveTabAs(QueryTabViewModel tab)
+        {
+            string? path = dialogService.ShowSaveFileDialog(tab.SuggestedFileName, GetDialogDirectory(tab));
+
+            if (path is null)
             {
                 return false;
             }
+
+            return WriteTab(tab, Path.GetFullPath(path));
+        }
+
+        /// <summary>
+        /// Writes a tab's text to a file, keeping the tab's encoding (new files use
+        /// the default encoding), and links the tab to that file.
+        /// </summary>
+        /// <param name="tab">The tab to save.</param>
+        /// <param name="path">The full path to write.</param>
+        /// <returns>True when saved; false when writing failed.</returns>
+        private bool WriteTab(QueryTabViewModel tab, string path)
+        {
+            Encoding encoding = tab.FileEncoding ?? fileService.DefaultEncoding;
 
             try
             {
-                queryStore.Save(name, tab.EditorText);
-                tab.MarkSaved(name);
-                RefreshSavedQueries();
-                StatusMessage = $"Saved '{name}'";
-
-                return true;
+                fileService.WriteText(path, tab.EditorText, encoding);
             }
             catch (Exception ex)
             {
-                dialogService.ShowError(ex.Message, "Save Query");
+                dialogService.ShowError($"Could not save '{path}'.\n\n{ex.Message}", "Save File");
 
                 return false;
             }
+
+            tab.MarkSaved(path, encoding);
+            lastFileDirectory = Path.GetDirectoryName(path);
+            StatusMessage = $"Saved '{tab.DisplayName}'";
+
+            return true;
+        }
+
+        /// <summary>
+        /// Picks the folder a file dialog starts in: the tab's own file folder, else
+        /// the folder of the last file opened or saved.
+        /// </summary>
+        /// <param name="tab">The tab the dialog is for, or null.</param>
+        /// <returns>The folder, or null to let Windows decide.</returns>
+        private string? GetDialogDirectory(QueryTabViewModel? tab)
+        {
+            if (tab?.FilePath is not null)
+            {
+                return Path.GetDirectoryName(tab.FilePath);
+            }
+
+            return lastFileDirectory;
         }
 
         /// <summary>

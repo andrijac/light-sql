@@ -4,15 +4,15 @@
 
 ```
 ┌ Menu: File | Edit | Query | Database | Tools | Help ───────────────────────────┐
-├ Toolbar: [Connect] [Database ▼] [Execute (F5)] [Cancel] [Save Query] ──────────┤
-├ Object Explorer │ [SQLQuery1 ✕] [report *✕] [SQLQuery3 ✕]   ← query tabs     │
+├ Toolbar: [Connect] [Database ▼] [Execute (F5)] [Cancel] [Open] [Save] ────────┤
+├ Object Explorer │ [SQLQuery1 ✕] [report.sql *✕] [SQLQuery3 ✕]   ← query tabs │
 │  (lazy tree)    │ SQL editor of the selected tab (line numbers, highlighting)  │
 │                 │ ═══════ splitter ═════════════════════════════════════════   │
 │                 │ Results │ Messages   (of the selected tab)                   │
 ├ Footer: status | connection | tab database | tab status | rows | elapsed | Ln, Col ┤
 ```
 
-The window title shows the selected tab (e.g. `report * - LightSQL`).
+The window title shows the selected tab (e.g. `report.sql * - LightSQL`).
 
 ## Query tabs (SSMS-style)
 
@@ -22,14 +22,17 @@ database**, **own Results/Messages**, and its own execution and cancellation.
 
 - **New tab:** **File → New Query** (Ctrl+N). New tabs are named `SQLQuery1`,
   `SQLQuery2`, … (numbers are not reused) and start on the selected tab's database.
+  A tab opened from a file is named after the file (e.g. `report.sql`); hover the
+  tab to see the full path.
 - **Switch tabs:** click a header. The editor of the selected tab gets focus.
 - **Close a tab:** the **✕** on the header, a **middle-click** on the header,
-  **File → Close Query** (Ctrl+F4), or right-click → **Close**. Right-click →
+  **File → Close** (Ctrl+F4), or right-click → **Close**. Right-click →
   **Close All But This** closes the others.
 - **Unsaved changes:** a tab whose text changed since it was opened/saved shows
   ` *` after its name. Closing it asks **Save / Don't Save / Cancel**
-  (Yes / No / Cancel). Closing the application asks the same for every modified tab;
-  **Cancel** keeps the application open.
+  (Yes / No / Cancel); **Save** on a tab that has no file yet shows **Save As**, and
+  cancelling that keeps the tab open. Closing the application asks the same for
+  every modified tab; **Cancel** keeps the application open.
 - **Running queries:** a tab that is executing shows *(executing)* in its header.
   You can switch to another tab and execute there at the same time — **F5** and
   **Cancel** always act on the selected tab. Closing an executing tab cancels its
@@ -90,16 +93,39 @@ clause**. If found, it asks for confirmation. The check ignores matches inside
 strings, comments, bracketed identifiers and subqueries. Disable it in
 **Tools → Options**.
 
-## Saving and opening queries
+## Opening and saving files
 
-- **File → Save Query** (Ctrl+S) asks for a name and writes the selected tab's text
-  to `<name>.sql` in your personal queries folder (default
-  `%USERPROFILE%\LightSQL\Queries`, configurable in Options). The tab is renamed to
-  the saved name.
-- **File → Open Query** lists the saved queries; selecting one opens it in a tab. If
-  it is already open, its tab is activated; if the selected tab is an untouched new
-  query, that tab is reused; otherwise a new tab is opened.
-- **File → Refresh Saved Queries** re-reads the folder.
+Queries are ordinary `.sql` files that you open and save anywhere, like in SSMS or
+any text editor.
+
+| Command | Shortcut | What it does |
+|---|---|---|
+| **File → New Query** | Ctrl+N | Opens a new, empty tab (no file yet). |
+| **File → Open File...** | Ctrl+O | Shows the Windows **Open** dialog (`*.sql`, `*.txt`, all files). Select one or several files; each opens in a tab. |
+| **File → Save** | Ctrl+S | Saves the selected tab to its file. A tab with no file yet shows **Save As** instead. |
+| **File → Save As...** | Ctrl+Shift+S | Saves the selected tab to a new file chosen in the Windows **Save As** dialog (which asks before overwriting). The tab then refers to the new file; the old file is left as it was. |
+| **File → Close** | Ctrl+F4 | Closes the selected tab (asks to save unsaved changes). |
+
+- Right-clicking a tab offers **Save** and **Save As...** for that tab.
+- The toolbar has **Open** and **Save** buttons.
+- **Drag and drop:** drop `.sql` files from Explorer anywhere on the window to open
+  them.
+- **Command line:** `LightSQL.exe script1.sql script2.sql` opens the files at
+  startup, so LightSQL can be used with **Open with** for `.sql` files.
+- Opening a file that is already open activates its tab. If the selected tab is an
+  untouched new query, the first file opens in it; otherwise each file gets a new
+  tab, using the selected tab's database.
+- A file that cannot be read or written (missing, locked, access denied) is reported
+  in an error message; nothing else changes and the tab keeps its unsaved changes.
+- The Open / Save As dialogs start in the folder of the selected tab's file, or else
+  the folder of the last file opened or saved.
+- **Encoding:** a file is saved back in the encoding it was opened with (UTF-8 with
+  or without a byte order mark, UTF-16, UTF-32, or the Windows ANSI code page for
+  older non-Unicode scripts). New files are saved as UTF-8 with a byte order mark,
+  the same as SSMS.
+
+Queries saved by earlier versions in `%USERPROFILE%\LightSQL\Queries` are ordinary
+`.sql` files: open them with **File → Open File...**.
 
 ## Object Explorer
 
@@ -133,7 +159,6 @@ Creating databases is also available via **Database → New Database…**.
 ## Options (Tools → Options)
 
 - Warn before executing UPDATE/DELETE without a WHERE clause (on by default).
-- Queries folder (with a Browse button).
 - Show line numbers.
 - Editor font size.
 

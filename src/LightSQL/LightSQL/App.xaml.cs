@@ -29,6 +29,12 @@ namespace LightSQL
             MainWindow mainWindow = serviceProvider.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
             mainWindow.Show();
+
+            // Open .sql files passed on the command line (e.g. "Open with LightSQL").
+            if (e.Args.Length > 0)
+            {
+                serviceProvider.GetRequiredService<MainViewModel>().OpenFiles(e.Args);
+            }
         }
 
         /// <summary>
@@ -52,7 +58,7 @@ namespace LightSQL
             services.AddSingleton<ICredentialProtector, DpapiCredentialProtector>();
             services.AddSingleton<IOptionsService, OptionsService>();
             services.AddSingleton<IConnectionStore, ConnectionStore>();
-            services.AddSingleton<IQueryStore, QueryStore>();
+            services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<ISqlConnectionService, SqlConnectionService>();
             services.AddSingleton<ISqlStatementAnalyzer, SqlStatementAnalyzer>();
             services.AddSingleton<IDialogService, DialogService>();

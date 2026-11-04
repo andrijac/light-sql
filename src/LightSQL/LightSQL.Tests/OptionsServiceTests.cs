@@ -49,7 +49,6 @@ namespace LightSQL.Tests
             AppOptions options = new()
             {
                 WarnOnUpdateDeleteWithoutWhere = false,
-                QueriesFolder = @"C:\Temp\Queries",
                 ShowLineNumbers = false,
                 EditorFontSize = 16d
             };
@@ -59,9 +58,21 @@ namespace LightSQL.Tests
             OptionsService reloaded = new(filePath);
 
             Assert.False(reloaded.Current.WarnOnUpdateDeleteWithoutWhere);
-            Assert.Equal(@"C:\Temp\Queries", reloaded.Current.QueriesFolder);
             Assert.False(reloaded.Current.ShowLineNumbers);
             Assert.Equal(16d, reloaded.Current.EditorFontSize);
+        }
+
+        [Fact]
+        public void Load_OldFileWithQueriesFolder_StillLoads()
+        {
+            // Options files written before saved queries were removed contain a
+            // "QueriesFolder" value; it must be ignored, not break loading.
+            File.WriteAllText(filePath, "{ \"WarnOnUpdateDeleteWithoutWhere\": false, \"QueriesFolder\": \"C:\\\\Temp\", \"EditorFontSize\": 15 }");
+
+            OptionsService service = new(filePath);
+
+            Assert.False(service.Current.WarnOnUpdateDeleteWithoutWhere);
+            Assert.Equal(15d, service.Current.EditorFontSize);
         }
     }
 }

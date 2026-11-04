@@ -46,7 +46,9 @@ Access order within a group: `public` → `internal` → `protected internal` �
 - View models (`MainViewModel` tabs, `QueryTabViewModel` execution,
   `ConnectionDialogViewModel` saved connections) are unit-tested with in-memory
   fakes in the test project: `FakeSqlConnectionService`, `FakeDialogService`,
-  `FakeQueryStore`, `FakeOptionsService`, `FakeConnectionStore`.
+  `FakeFileService` (in-memory files), `FakeOptionsService`, `FakeConnectionStore`.
+- `FileService` encoding detection and byte-for-byte round-trips are tested
+  against real temporary files.
 - The SQL service is verified manually / via a temporary LocalDB smoke test against
   `(localdb)\MSSQLLocalDB` (connect, list, execute, create, metadata, drop). That
   smoke test is not part of the permanent suite.

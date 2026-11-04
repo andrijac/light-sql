@@ -44,19 +44,6 @@ namespace LightSQL.Services
         }
 
         /// <summary>
-        /// Default folder for saved queries: "%USERPROFILE%\LightSQL\Queries".
-        /// </summary>
-        public static string DefaultQueriesFolder
-        {
-            get
-            {
-                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-                return Path.Combine(profile, "LightSQL", "Queries");
-            }
-        }
-
-        /// <summary>
         /// Ensures a directory exists, creating it (and any parents) if needed.
         /// </summary>
         /// <param name="path">The directory path to ensure.</param>
