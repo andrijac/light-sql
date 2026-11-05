@@ -1,5 +1,19 @@
 # LightSQL — Features & Usage
 
+## Running the app
+
+Double-click `run.cmd` in the repository root, or run it from a terminal:
+
+```bash
+run.cmd
+```
+
+It builds the app (Debug) and starts it, then returns without waiting for the
+window to close. `.sql` files given as arguments open in query tabs
+(`run.cmd scripts\report.sql`); relative paths are relative to the folder you run
+it from. It needs the .NET 10 SDK. If LightSQL is already running, it says so and
+stops, because the running app locks its `.exe` and the build could not replace it.
+
 ## Window layout
 
 ```

@@ -7,6 +7,7 @@ injection.
 ## Solution layout
 
 ```
+run.cmd                          Builds (Debug) and starts the app; passes .sql file arguments on
 src/LightSQL/
 ├─ LightSQL.slnx                 Solution (LightSQL + LightSQL.Tests)
 ├─ LightSQL/                     The WPF application
