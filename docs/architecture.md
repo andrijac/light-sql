@@ -15,6 +15,7 @@ src/LightSQL/
 │  ├─ ViewModels/               View models (MVVM)
 │  ├─ Views/                    Windows and user controls (XAML + code-behind)
 │  ├─ Controls/                 Custom WPF controls/panels (ResultGridsPanel)
+│  ├─ Behaviors/                Attached behaviours (TreeViewRightClickSelection)
 │  ├─ Converters/               WPF value converters
 │  ├─ Resources/                Shared XAML resources (ObjectExplorerIcons.xaml)
 │  ├─ Editor/                   SqlSyntax.xshd (embedded T-SQL highlighting)
@@ -126,6 +127,14 @@ by `MainViewModel` at runtime and are not registered in the container.
   viewport height is bound in (`ViewportHeight`). Measuring every grid with a finite
   height also keeps DataGrid row virtualization working. The sizing rule is the
   static, unit-tested `CalculateItemHeight`.
+
+- **Behaviors** — `TreeViewRightClickSelection.IsEnabled` (attached property, set
+  on the Object Explorer `TreeView`) handles `PreviewMouseRightButtonDown`, walks
+  up from the clicked element to the nearest `TreeViewItem` and selects and
+  focuses it. WPF's `TreeView` only selects on a left-click; the event is left
+  unhandled so the node's context menu still opens. Being an attached behaviour, it
+  keeps this view-only concern out of the view models and code-behind and can be
+  reused on any tree.
 
 - **Object Explorer icons** — `Resources/ObjectExplorerIcons.xaml` (merged into
   `App.xaml`) holds one 16×16 vector `DrawingImage` per node kind (`Icon.Server`,

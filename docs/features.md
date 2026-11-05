@@ -155,7 +155,8 @@ Each node shows an icon for its type:
 | Loading… (while a level loads) | grey hourglass, grey italic text |
 | Load error | red circle with a cross, red text |
 
-Right-click a node for:
+Right-clicking a node first selects it (the highlight moves to it, as in SSMS), so
+it is always clear which node the context menu acts on. Right-click a node for:
 
 - **New Query** — open a new, empty query tab on the node's database.
 - **Select Top 1000** — open a new tab with a `SELECT TOP 1000` for a table/view

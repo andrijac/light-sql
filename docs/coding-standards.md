@@ -42,7 +42,9 @@ Access order within a group: `public` → `internal` → `protected internal` �
   building, stores, result-grid sizing, Object Explorer icon mapping) is
   unit-tested without a live server. Tests that must load WPF XAML (e.g. checking
   every icon key exists in `ObjectExplorerIcons.xaml`) run their work on an STA
-  thread.
+  thread. `TreeViewRightClickSelectionTests` shows a real `TreeView` in an
+  off-screen window and raises the same tunnelling `PreviewMouseDown` a real
+  right-click raises.
 - View models (`MainViewModel` tabs, `QueryTabViewModel` execution,
   `ConnectionDialogViewModel` saved connections) are unit-tested with in-memory
   fakes in the test project: `FakeSqlConnectionService`, `FakeDialogService`,

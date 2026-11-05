@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:LightSQL.ViewModels"
         xmlns:views="clr-namespace:LightSQL.Views"
         xmlns:converters="clr-namespace:LightSQL.Converters"
+        xmlns:behaviors="clr-namespace:LightSQL.Behaviors"
         Title="{Binding SelectedTab.Header, StringFormat='{}{0} - LightSQL', FallbackValue='LightSQL', TargetNullValue='LightSQL'}"
         Height="700"
         Width="1100"
@@ -144,9 +145,11 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Object Explorer -->
+            <!-- Object Explorer. A right-click selects the clicked node before its
+                 context menu opens. -->
             <TreeView x:Name="ObjectTree"
                       Grid.Column="0"
+                      behaviors:TreeViewRightClickSelection.IsEnabled="True"
                       ItemsSource="{Binding ObjectExplorer.RootNodes}">
                 <TreeView.Resources>
                     <!-- Each node shows an icon for its object type (folders open while
