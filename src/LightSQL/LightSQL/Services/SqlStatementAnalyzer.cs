@@ -26,6 +26,36 @@ namespace LightSQL.Services
             "EXEC", "EXECUTE", "PRINT"
         };
 
+        /// <summary>
+        /// Keywords that are not allowed anywhere in a read-only batch, because the
+        /// statement they belong to can change data, schema, permissions or server
+        /// state, run arbitrary code (EXEC), end the protecting transaction (COMMIT,
+        /// ROLLBACK, SAVE TRAN) or reach other servers (OPENROWSET, ...). INTO blocks
+        /// SELECT ... INTO, which creates a table.
+        /// </summary>
+        private static readonly HashSet<string> writeKeywords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "INSERT", "UPDATE", "DELETE", "MERGE", "TRUNCATE", "INTO",
+            "CREATE", "ALTER", "DROP", "ENABLE", "DISABLE",
+            "GRANT", "REVOKE", "DENY",
+            "EXEC", "EXECUTE",
+            "COMMIT", "ROLLBACK", "SAVE", "TRAN", "TRANSACTION",
+            "BACKUP", "RESTORE", "DBCC", "BULK", "CHECKPOINT", "KILL", "SHUTDOWN", "RECONFIGURE",
+            "SETUSER", "WRITETEXT", "UPDATETEXT",
+            "OPENROWSET", "OPENQUERY", "OPENDATASOURCE",
+            "SEND", "RECEIVE"
+        };
+
+        /// <summary>
+        /// Words a read-only batch may start with. Any other first word could be a
+        /// procedure call, which T-SQL allows without EXEC as a batch's first statement
+        /// (e.g. "sp_configure 'x', 1").
+        /// </summary>
+        private static readonly HashSet<string> readOnlyBatchStarters = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "SELECT", "WITH", "DECLARE", "SET", "PRINT", "IF", "BEGIN", "WHILE", "USE", "RETURN", "RAISERROR", "THROW", "WAITFOR"
+        };
+
         /// <inheritdoc />
         public bool HasUnguardedUpdateOrDelete(string sql)
         {
@@ -79,6 +109,80 @@ namespace LightSQL.Services
             }
 
             return false;
+        }
+
+        /// <inheritdoc />
+        public string? FindWriteOperation(string sql)
+        {
+            if (string.IsNullOrWhiteSpace(sql) == true)
+            {
+                return null;
+            }
+
+            List<string> words = ExtractWords(RemoveCommentsAndLiterals(sql));
+
+            if (words.Count == 0)
+            {
+                return null;
+            }
+
+            foreach (string word in words)
+            {
+                if (writeKeywords.Contains(word) == true)
+                {
+                    return word.ToUpperInvariant();
+                }
+            }
+
+            // A batch that starts with a name runs it as a stored procedure.
+            if (readOnlyBatchStarters.Contains(words[0]) == false)
+            {
+                // "_id_" is the placeholder of a bracketed/quoted name such as [dbo].[proc].
+                return words[0] == "_id_" ? "procedure call" : $"procedure call '{words[0]}'";
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Extracts the words (keywords and plain identifiers) of cleaned SQL.
+        /// Variables (@name) and temp-table names (#name) are skipped: they are never
+        /// keywords, so "@insert" does not count as INSERT.
+        /// </summary>
+        /// <param name="sql">SQL with comments and literals neutralized.</param>
+        /// <returns>The words, in order.</returns>
+        private static List<string> ExtractWords(string sql)
+        {
+            List<string> words = new();
+            int index = 0;
+
+            while (index < sql.Length)
+            {
+                char current = sql[index];
+
+                if (char.IsLetter(current) == false && current != '_' && current != '@' && current != '#')
+                {
+                    index++;
+
+                    continue;
+                }
+
+                int start = index;
+
+                while (index < sql.Length && (char.IsLetterOrDigit(sql[index]) == true || sql[index] == '_' || sql[index] == '@' || sql[index] == '#' || sql[index] == '$'))
+                {
+                    index++;
+                }
+
+                string word = sql.Substring(start, index - start);
+
+                if (word[0] != '@' && word[0] != '#')
+                {
+                    words.Add(word);
+                }
+            }
+
+            return words;
         }
 
         /// <summary>

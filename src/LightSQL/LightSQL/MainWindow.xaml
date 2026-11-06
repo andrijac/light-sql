@@ -6,6 +6,7 @@
         xmlns:views="clr-namespace:LightSQL.Views"
         xmlns:converters="clr-namespace:LightSQL.Converters"
         xmlns:behaviors="clr-namespace:LightSQL.Behaviors"
+        xmlns:controls="clr-namespace:LightSQL.Controls"
         Title="{Binding SelectedTab.Header, StringFormat='{}{0} - LightSQL', FallbackValue='LightSQL', TargetNullValue='LightSQL'}"
         Height="700"
         Width="1100"
@@ -68,6 +69,10 @@
                 <Separator />
                 <MenuItem Header="_New Database..." Command="{Binding ObjectExplorer.NewDatabaseCommand}" />
                 <MenuItem Header="_Refresh Databases" Command="{Binding ObjectExplorer.RefreshCommand}" />
+                <Separator />
+                <MenuItem Header="Start _MCP Server"
+                          Command="{Binding StartMcpServerCommand}"
+                          ToolTip="Start an MCP server for this connection so AI clients (Claude, Codex) can query it" />
             </MenuItem>
 
             <MenuItem Header="_Tools">
@@ -88,7 +93,7 @@
                 <!-- Each query tab has its own database; this shows/changes the selected tab's. -->
                 <ComboBox Width="200"
                           ItemsSource="{Binding Databases}"
-                          SelectedItem="{Binding SelectedTab.ActiveDatabase}"
+                          SelectedItem="{Binding SelectedQueryTab.ActiveDatabase}"
                           IsEnabled="{Binding IsConnected}"
                           ToolTip="Database of the current query tab" />
                 <Separator />
@@ -107,6 +112,10 @@
                 <Button Content="Save"
                         Command="{Binding SaveFileCommand}"
                         ToolTip="Save the query to its file (Ctrl+S)" />
+                <Separator />
+                <Button Content="MCP Server"
+                        Command="{Binding StartMcpServerCommand}"
+                        ToolTip="Start an MCP server for this connection (AI clients such as Claude or Codex can then query it)" />
             </ToolBar>
         </ToolBarTray>
 
@@ -121,13 +130,13 @@
             </StatusBarItem>
             <Separator />
             <StatusBarItem>
-                <TextBlock Text="{Binding SelectedTab.ActiveDatabase, TargetNullValue='(no database)', FallbackValue='(no database)'}" />
+                <TextBlock Text="{Binding SelectedQueryTab.ActiveDatabase, TargetNullValue='(no database)', FallbackValue='(no database)'}" />
             </StatusBarItem>
             <!-- Execution details of the selected query tab. -->
             <StatusBarItem HorizontalAlignment="Right">
                 <StackPanel Orientation="Horizontal"
-                            DataContext="{Binding SelectedTab}"
-                            Visibility="{Binding DataContext.HasTabs, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibility}}">
+                            DataContext="{Binding SelectedQueryTab}"
+                            Visibility="{Binding DataContext.IsQueryTabSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibility}}">
                     <TextBlock Text="{Binding ExecutionStatus}" Margin="0,0,12,0" />
                     <TextBlock Text="{Binding RowCountText}" Margin="0,0,12,0" />
                     <TextBlock Text="{Binding ElapsedText}" Margin="0,0,12,0" />
@@ -209,6 +218,11 @@
                                               Command="{Binding DropCommand}"
                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                     <Separator />
+                                    <MenuItem Header="Start MCP Server"
+                                              ToolTip="Start an MCP server with this database as its default"
+                                              Command="{Binding StartMcpServerCommand}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Separator />
                                     <MenuItem Header="Refresh"
                                               Command="{Binding RefreshCommand}"
                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -242,8 +256,8 @@
                         </ControlTemplate>
                     </TabControl.Template>
 
-                    <!-- Header: name (with * when modified), running indicator, close button. -->
-                    <TabControl.ItemTemplate>
+                    <TabControl.Resources>
+                        <!-- Query tab header: name (with * when modified), running indicator, close button. -->
                         <DataTemplate DataType="{x:Type vm:QueryTabViewModel}">
                             <StackPanel Orientation="Horizontal" ToolTip="{Binding ToolTip}">
                                 <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
@@ -265,12 +279,43 @@
                                         CommandParameter="{Binding}" />
                             </StackPanel>
                         </DataTemplate>
-                    </TabControl.ItemTemplate>
 
-                    <!-- Right-click menu on a tab header. -->
-                    <TabControl.ItemContainerStyle>
-                        <!-- BasedOn keeps the themed look; only the menu is added. -->
-                        <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                        <!-- MCP server tab header: state dot (green running, grey stopped,
+                             red failed), name with port, close button (stops the server). -->
+                        <DataTemplate DataType="{x:Type vm:McpServerTabViewModel}">
+                            <StackPanel Orientation="Horizontal" ToolTip="{Binding ToolTip}">
+                                <Ellipse Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource Theme.SecondaryForeground}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding State}" Value="Running">
+                                                    <Setter Property="Fill" Value="{DynamicResource Theme.SuccessForeground}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding State}" Value="Failed">
+                                                    <Setter Property="Fill" Value="{DynamicResource Theme.ErrorForeground}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
+                                <Button Content="✕"
+                                        Margin="6,0,0,0"
+                                        Padding="3,0"
+                                        FontSize="10"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Focusable="False"
+                                        ToolTip="Close and stop the server"
+                                        Command="{Binding DataContext.CloseQueryCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+
+                        <!-- Query tab: right-click menu. BasedOn keeps the themed look. -->
+                        <Style x:Key="QueryTabItemStyle" TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
                             <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}" />
                             <Setter Property="ContextMenu">
                                 <Setter.Value>
@@ -294,23 +339,58 @@
                                 </Setter.Value>
                             </Setter>
                         </Style>
-                    </TabControl.ItemContainerStyle>
+
+                        <!-- MCP server tab: right-click menu. BasedOn keeps the themed look. -->
+                        <Style x:Key="McpServerTabItemStyle" TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                            <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}" />
+                            <Setter Property="ContextMenu">
+                                <Setter.Value>
+                                    <ContextMenu DataContext="{Binding Path=PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Start Server"
+                                                  Command="{Binding PlacementTarget.DataContext.StartServerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <MenuItem Header="Stop Server"
+                                                  Command="{Binding PlacementTarget.DataContext.StopServerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <MenuItem Header="Copy Endpoint URL"
+                                                  Command="{Binding PlacementTarget.DataContext.CopyEndpointCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Separator />
+                                        <MenuItem Header="Close"
+                                                  InputGestureText="Ctrl+F4"
+                                                  Command="{Binding CloseQueryCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <MenuItem Header="Close All But This"
+                                                  Command="{Binding CloseOtherQueriesCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    </ContextMenu>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TabControl.Resources>
+
+                    <!-- Each kind of tab gets its own header style and right-click menu. -->
+                    <TabControl.ItemContainerStyleSelector>
+                        <controls:DocumentTabStyleSelector QueryTabStyle="{StaticResource QueryTabItemStyle}"
+                                                           McpServerTabStyle="{StaticResource McpServerTabItemStyle}" />
+                    </TabControl.ItemContainerStyleSelector>
                 </TabControl>
 
                 <Grid>
-                    <!-- One QueryTabView per open tab, stacked; only the selected one is
-                         visible. Hidden views stay alive (undo history, caret, scroll). -->
+                    <!-- One view per open tab, stacked; only the selected one is visible.
+                         Hidden views stay alive (undo history, caret, scroll). The view is
+                         chosen by the tab's type: a query editor or an MCP server page. -->
                     <ItemsControl ItemsSource="{Binding Tabs}" Focusable="False">
+                        <ItemsControl.Resources>
+                            <DataTemplate DataType="{x:Type vm:QueryTabViewModel}">
+                                <views:QueryTabView Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibility}}" />
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:McpServerTabViewModel}">
+                                <views:McpServerTabView Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibility}}" />
+                            </DataTemplate>
+                        </ItemsControl.Resources>
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <Grid />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:QueryTabViewModel}">
-                                <views:QueryTabView Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibility}}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <!-- Shown when every tab has been closed. -->

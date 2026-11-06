@@ -16,9 +16,35 @@ namespace LightSQL.Tests
         public List<(string Sql, string? Database)> ExecutedBatches { get; } = new();
 
         /// <summary>
+        /// The batches passed to <see cref="ExecuteReadOnlyBatchAsync"/> (they are also
+        /// recorded in <see cref="ExecutedBatches"/>).
+        /// </summary>
+        public List<string> ReadOnlyBatches { get; } = new();
+
+        /// <summary>
         /// The databases returned by <see cref="GetDatabasesAsync"/>.
         /// </summary>
         public List<string> DatabaseNames { get; } = new() { "master", "Sales", "HR" };
+
+        /// <summary>
+        /// The tables returned by <see cref="GetTablesAsync"/>.
+        /// </summary>
+        public List<SchemaObject> Tables { get; } = new();
+
+        /// <summary>
+        /// The columns returned by <see cref="GetColumnsAsync"/> (for any table).
+        /// </summary>
+        public List<ColumnInfo> Columns { get; } = new();
+
+        /// <summary>
+        /// Every (database, schema, object) passed to <see cref="GetColumnsAsync"/>.
+        /// </summary>
+        public List<(string Database, string Schema, string ObjectName)> ColumnLookups { get; } = new();
+
+        /// <summary>
+        /// When set, <see cref="ConnectAsync"/> throws this exception (e.g. a failed login).
+        /// </summary>
+        public Exception? ConnectFailure { get; set; }
 
         /// <summary>
         /// Optional custom execution behaviour. When null, a result with one table
@@ -64,6 +90,11 @@ namespace LightSQL.Tests
         /// <inheritdoc />
         public Task<string> ConnectAsync(ConnectionProfile profile, CancellationToken cancellationToken)
         {
+            if (ConnectFailure is not null)
+            {
+                return Task.FromException<string>(ConnectFailure);
+            }
+
             IsConnected = true;
             ServerName = profile.Server;
             CurrentDatabase ??= "master";
@@ -99,6 +130,14 @@ namespace LightSQL.Tests
         }
 
         /// <inheritdoc />
+        public Task<QueryExecutionResult> ExecuteReadOnlyBatchAsync(string sql, string? database, CancellationToken cancellationToken)
+        {
+            ReadOnlyBatches.Add(sql);
+
+            return ExecuteBatchAsync(sql, database, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public Task<IReadOnlyList<string>> GetDatabasesAsync(CancellationToken cancellationToken)
         {
             IReadOnlyList<string> names = DatabaseNames.ToList();
@@ -109,7 +148,7 @@ namespace LightSQL.Tests
         /// <inheritdoc />
         public Task<IReadOnlyList<SchemaObject>> GetTablesAsync(string database, CancellationToken cancellationToken)
         {
-            IReadOnlyList<SchemaObject> objects = new List<SchemaObject>();
+            IReadOnlyList<SchemaObject> objects = Tables.ToList();
 
             return Task.FromResult(objects);
         }
@@ -125,7 +164,9 @@ namespace LightSQL.Tests
         /// <inheritdoc />
         public Task<IReadOnlyList<ColumnInfo>> GetColumnsAsync(string database, string schema, string objectName, CancellationToken cancellationToken)
         {
-            IReadOnlyList<ColumnInfo> columns = new List<ColumnInfo>();
+            ColumnLookups.Add((database, schema, objectName));
+
+            IReadOnlyList<ColumnInfo> columns = Columns.ToList();
 
             return Task.FromResult(columns);
         }

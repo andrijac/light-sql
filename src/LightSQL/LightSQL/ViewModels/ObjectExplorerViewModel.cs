@@ -163,6 +163,26 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Starts an MCP server for the connection in a new tab. On a database (or
+        /// anything inside one) that database becomes the server's default; on the
+        /// server node the connection's default database is used.
+        /// </summary>
+        /// <param name="node">The invoking node.</param>
+        /// <returns>A task that completes when the server is running or has failed.</returns>
+        [RelayCommand]
+        private async Task StartMcpServerAsync(TreeNodeViewModel? node)
+        {
+            if (MainActions is null)
+            {
+                return;
+            }
+
+            string? database = node is null || string.IsNullOrWhiteSpace(node.DatabaseName) == true ? null : node.DatabaseName;
+
+            await MainActions.OpenMcpServerTabAsync(database);
+        }
+
+        /// <summary>
         /// Drops a database, table or view after confirmation.
         /// </summary>
         /// <param name="node">The node to drop.</param>

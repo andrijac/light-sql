@@ -30,18 +30,24 @@ namespace LightSQL
 
         /// <summary>
         /// Asks to save modified query tabs before the window closes; cancels the
-        /// close when the user chooses Cancel.
+        /// close when the user chooses Cancel. Otherwise stops the MCP servers.
         /// </summary>
         private void OnWindowClosing(object? sender, CancelEventArgs e)
         {
             if (viewModel.ConfirmCloseAll() == false)
             {
                 e.Cancel = true;
+
+                return;
             }
+
+            // Release the MCP servers' ports. Not awaited: the process is ending and
+            // would free them anyway; this just lets clients see a clean shutdown.
+            _ = viewModel.StopAllMcpServersAsync();
         }
 
         /// <summary>
-        /// Closes a query tab when its header is middle-clicked (as in SSMS and browsers).
+        /// Closes a tab when its header is middle-clicked (as in SSMS and browsers).
         /// </summary>
         private void QueryTabStrip_MouseUp(object sender, MouseButtonEventArgs e)
         {
@@ -52,7 +58,7 @@ namespace LightSQL
 
             TabItem? tabItem = FindAncestor<TabItem>(e.OriginalSource as DependencyObject);
 
-            if (tabItem?.DataContext is QueryTabViewModel tab)
+            if (tabItem?.DataContext is DocumentTabViewModel tab)
             {
                 viewModel.CloseQueryCommand.Execute(tab);
                 e.Handled = true;

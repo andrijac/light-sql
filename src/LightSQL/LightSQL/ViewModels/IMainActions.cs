@@ -26,5 +26,13 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <returns>A task that completes when the list is refreshed.</returns>
         Task RefreshDatabaseListAsync();
+
+        /// <summary>
+        /// Starts an MCP server for the current connection in a new tab, so AI
+        /// clients can query the server.
+        /// </summary>
+        /// <param name="database">The server's default database, or null for the connection's default.</param>
+        /// <returns>A task that completes when the server is running or has failed.</returns>
+        Task OpenMcpServerTabAsync(string? database);
     }
 }

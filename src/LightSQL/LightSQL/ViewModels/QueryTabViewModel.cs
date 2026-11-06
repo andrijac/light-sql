@@ -11,7 +11,7 @@ namespace LightSQL.ViewModels
     /// text, caret/selection, active database, results, execution state and
     /// cancellation, so several queries can be edited and executed independently.
     /// </summary>
-    public partial class QueryTabViewModel : ObservableObject
+    public partial class QueryTabViewModel : DocumentTabViewModel
     {
         private readonly ISqlConnectionService sqlService;
         private readonly ISqlStatementAnalyzer statementAnalyzer;
@@ -56,9 +56,6 @@ namespace LightSQL.ViewModels
         [NotifyPropertyChangedFor(nameof(Header))]
         [NotifyPropertyChangedFor(nameof(IsPristine))]
         private bool isModified;
-
-        [ObservableProperty]
-        private bool isSelected;
 
         [ObservableProperty]
         private bool isExecuting;
@@ -120,7 +117,7 @@ namespace LightSQL.ViewModels
         /// The file name (e.g. "report.sql"), or the default title when the query has
         /// no file yet.
         /// </summary>
-        public string DisplayName
+        public override string DisplayName
         {
             get
             {
@@ -131,7 +128,7 @@ namespace LightSQL.ViewModels
         /// <summary>
         /// The tab header tooltip: the full file path, or the default title.
         /// </summary>
-        public string ToolTip
+        public override string ToolTip
         {
             get
             {
@@ -154,7 +151,7 @@ namespace LightSQL.ViewModels
         /// <summary>
         /// The tab header text: the display name, with " *" when there are unsaved changes.
         /// </summary>
-        public string Header
+        public override string Header
         {
             get
             {
@@ -219,6 +216,14 @@ namespace LightSQL.ViewModels
         public void CancelExecution()
         {
             executionCancellation?.Cancel();
+        }
+
+        /// <summary>
+        /// Cancels a running execution when the tab is closed.
+        /// </summary>
+        public override void OnClosed()
+        {
+            CancelExecution();
         }
 
         /// <summary>

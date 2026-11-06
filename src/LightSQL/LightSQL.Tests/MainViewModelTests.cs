@@ -17,13 +17,15 @@ namespace LightSQL.Tests
         private readonly FakeDialogService dialogService = new();
         private readonly FakeFileService fileService = new();
         private readonly FakeOptionsService optionsService = new();
+        private readonly FakeMcpServerHostFactory mcpHostFactory = new();
+        private readonly FakeClipboardService clipboardService = new();
 
         [Fact]
         public void Startup_OpensOneSelectedEmptyTab()
         {
             MainViewModel viewModel = CreateViewModel();
 
-            QueryTabViewModel tab = Assert.Single(viewModel.Tabs);
+            QueryTabViewModel tab = Assert.Single(viewModel.QueryTabs);
             Assert.Same(tab, viewModel.SelectedTab);
             Assert.True(tab.IsSelected);
             Assert.Equal("SQLQuery1", tab.Header);
@@ -34,12 +36,12 @@ namespace LightSQL.Tests
         public void NewQuery_AddsAndSelectsTab_WithNextTitle()
         {
             MainViewModel viewModel = CreateViewModel();
-            QueryTabViewModel first = viewModel.Tabs[0];
+            QueryTabViewModel first = QueryTab(viewModel, 0);
 
             viewModel.NewQueryCommand.Execute(null);
 
             Assert.Equal(2, viewModel.Tabs.Count);
-            QueryTabViewModel second = viewModel.Tabs[1];
+            QueryTabViewModel second = QueryTab(viewModel, 1);
             Assert.Same(second, viewModel.SelectedTab);
             Assert.Equal("SQLQuery2", second.Header);
             Assert.True(second.IsSelected);
@@ -51,22 +53,22 @@ namespace LightSQL.Tests
         {
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
-            viewModel.CloseQueryCommand.Execute(viewModel.Tabs[1]);
+            viewModel.CloseQueryCommand.Execute(QueryTab(viewModel, 1));
 
             viewModel.NewQueryCommand.Execute(null);
 
-            Assert.Equal("SQLQuery3", viewModel.Tabs[1].Header);
+            Assert.Equal("SQLQuery3", QueryTab(viewModel, 1).Header);
         }
 
         [Fact]
         public async Task NewQuery_UsesSelectedTabDatabase()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
-            viewModel.SelectedTab!.ActiveDatabase = "Sales";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "Sales";
 
             viewModel.NewQueryCommand.Execute(null);
 
-            Assert.Equal("Sales", viewModel.SelectedTab!.ActiveDatabase);
+            Assert.Equal("Sales", viewModel.SelectedQueryTab!.ActiveDatabase);
         }
 
         [Fact]
@@ -75,8 +77,8 @@ namespace LightSQL.Tests
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
             viewModel.NewQueryCommand.Execute(null);
-            QueryTabViewModel middle = viewModel.Tabs[1];
-            QueryTabViewModel last = viewModel.Tabs[2];
+            QueryTabViewModel middle = QueryTab(viewModel, 1);
+            QueryTabViewModel last = QueryTab(viewModel, 2);
             viewModel.SelectedTab = middle;
 
             viewModel.CloseQueryCommand.Execute(null);
@@ -91,7 +93,7 @@ namespace LightSQL.Tests
         public void CloseQuery_ModifiedTab_Cancel_KeepsTab()
         {
             MainViewModel viewModel = CreateViewModel();
-            QueryTabViewModel tab = viewModel.Tabs[0];
+            QueryTabViewModel tab = QueryTab(viewModel, 0);
             tab.EditorText = "SELECT 1";
             dialogService.SaveChangesResult = SaveChangesChoice.Cancel;
 
@@ -105,7 +107,7 @@ namespace LightSQL.Tests
         public void CloseQuery_ModifiedTab_Discard_ClosesWithoutSaving()
         {
             MainViewModel viewModel = CreateViewModel();
-            QueryTabViewModel tab = viewModel.Tabs[0];
+            QueryTabViewModel tab = QueryTab(viewModel, 0);
             tab.EditorText = "SELECT 1";
             dialogService.SaveChangesResult = SaveChangesChoice.Discard;
 
@@ -119,7 +121,7 @@ namespace LightSQL.Tests
         public void CloseQuery_ModifiedNewTab_Save_AsksForFileThenCloses()
         {
             MainViewModel viewModel = CreateViewModel();
-            QueryTabViewModel tab = viewModel.Tabs[0];
+            QueryTabViewModel tab = QueryTab(viewModel, 0);
             tab.EditorText = "SELECT 42";
             dialogService.SaveChangesResult = SaveChangesChoice.Save;
             dialogService.SaveFileResult = @"C:\Scripts\answer.sql";
@@ -134,7 +136,7 @@ namespace LightSQL.Tests
         public void CloseQuery_ModifiedTab_SaveAsCancelled_KeepsTab()
         {
             MainViewModel viewModel = CreateViewModel();
-            QueryTabViewModel tab = viewModel.Tabs[0];
+            QueryTabViewModel tab = QueryTab(viewModel, 0);
             tab.EditorText = "SELECT 42";
             dialogService.SaveChangesResult = SaveChangesChoice.Save;
             dialogService.SaveFileResult = null;
@@ -151,7 +153,7 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
             MainViewModel viewModel = CreateViewModel();
             viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
-            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 2";
 
             viewModel.CloseQueryCommand.Execute(null);
 
@@ -179,7 +181,7 @@ namespace LightSQL.Tests
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
             viewModel.NewQueryCommand.Execute(null);
-            QueryTabViewModel keep = viewModel.Tabs[1];
+            QueryTabViewModel keep = QueryTab(viewModel, 1);
 
             viewModel.CloseOtherQueriesCommand.Execute(keep);
 
@@ -192,8 +194,8 @@ namespace LightSQL.Tests
         {
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
-            QueryTabViewModel keep = viewModel.Tabs[1];
-            viewModel.Tabs[0].EditorText = "unsaved";
+            QueryTabViewModel keep = QueryTab(viewModel, 1);
+            QueryTab(viewModel, 0).EditorText = "unsaved";
             dialogService.SaveChangesResult = SaveChangesChoice.Cancel;
 
             viewModel.CloseOtherQueriesCommand.Execute(keep);
@@ -210,7 +212,7 @@ namespace LightSQL.Tests
 
             viewModel.OpenFileCommand.Execute(null);
 
-            QueryTabViewModel tab = Assert.Single(viewModel.Tabs);
+            QueryTabViewModel tab = Assert.Single(viewModel.QueryTabs);
             Assert.Equal("report.sql", tab.Header);
             Assert.Equal(@"C:\Scripts\report.sql", tab.FilePath);
             Assert.Equal("SELECT * FROM Report", tab.EditorText);
@@ -223,13 +225,13 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\report.sql", "SELECT * FROM Report");
             dialogService.OpenFileResult.Add(@"C:\Scripts\report.sql");
             MainViewModel viewModel = CreateViewModel();
-            viewModel.Tabs[0].EditorText = "SELECT 1";
+            QueryTab(viewModel, 0).EditorText = "SELECT 1";
 
             viewModel.OpenFileCommand.Execute(null);
 
             Assert.Equal(2, viewModel.Tabs.Count);
-            Assert.Equal("report.sql", viewModel.SelectedTab!.Header);
-            Assert.Equal("SELECT 1", viewModel.Tabs[0].EditorText);
+            Assert.Equal("report.sql", viewModel.SelectedQueryTab!.Header);
+            Assert.Equal("SELECT 1", QueryTab(viewModel, 0).EditorText);
         }
 
         [Fact]
@@ -243,7 +245,7 @@ namespace LightSQL.Tests
             viewModel.OpenFileCommand.Execute(null);
 
             Assert.Equal(new[] { "a.sql", "b.sql" }, viewModel.Tabs.Select(tab => tab.Header));
-            Assert.Equal("b.sql", viewModel.SelectedTab!.Header);
+            Assert.Equal("b.sql", viewModel.SelectedQueryTab!.Header);
         }
 
         [Fact]
@@ -252,7 +254,7 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\report.sql", "SELECT * FROM Report");
             MainViewModel viewModel = CreateViewModel();
             viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
-            QueryTabViewModel reportTab = viewModel.SelectedTab!;
+            QueryTabViewModel reportTab = viewModel.SelectedQueryTab!;
             viewModel.NewQueryCommand.Execute(null);
 
             // Same file, different letter case: still the same file on Windows.
@@ -269,7 +271,7 @@ namespace LightSQL.Tests
 
             viewModel.OpenFileCommand.Execute(null);
 
-            QueryTabViewModel tab = Assert.Single(viewModel.Tabs);
+            QueryTabViewModel tab = Assert.Single(viewModel.QueryTabs);
             Assert.Null(tab.FilePath);
             Assert.Equal(0, dialogService.ErrorCount);
         }
@@ -279,7 +281,7 @@ namespace LightSQL.Tests
         {
             dialogService.OpenFileResult.Add(@"C:\Scripts\missing.sql");
             MainViewModel viewModel = CreateViewModel();
-            viewModel.Tabs[0].EditorText = "SELECT 1";
+            QueryTab(viewModel, 0).EditorText = "SELECT 1";
 
             viewModel.OpenFileCommand.Execute(null);
 
@@ -305,7 +307,7 @@ namespace LightSQL.Tests
         {
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
-            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 2";
             dialogService.SaveFileResult = @"C:\Scripts\second.sql";
 
             viewModel.SaveFileCommand.Execute(null);
@@ -314,9 +316,9 @@ namespace LightSQL.Tests
             Assert.Equal("SQLQuery2.sql", suggested);
             Assert.Equal("SELECT 2", fileService.Files[@"C:\Scripts\second.sql"].Text);
             Assert.Same(fileService.DefaultEncoding, fileService.Files[@"C:\Scripts\second.sql"].Encoding);
-            Assert.Equal("second.sql", viewModel.SelectedTab.Header);
-            Assert.False(viewModel.SelectedTab.IsModified);
-            Assert.Equal("SQLQuery1", viewModel.Tabs[0].Header);
+            Assert.Equal("second.sql", viewModel.SelectedQueryTab!.Header);
+            Assert.False(viewModel.SelectedQueryTab!.IsModified);
+            Assert.Equal("SQLQuery1", QueryTab(viewModel, 0).Header);
         }
 
         [Fact]
@@ -326,14 +328,14 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1", utf16);
             MainViewModel viewModel = CreateViewModel();
             viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
-            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 2";
 
             viewModel.SaveFileCommand.Execute(null);
 
             Assert.Empty(dialogService.SaveFilePrompts);
             Assert.Equal("SELECT 2", fileService.Files[@"C:\Scripts\report.sql"].Text);
             Assert.Same(utf16, fileService.Files[@"C:\Scripts\report.sql"].Encoding);
-            Assert.False(viewModel.SelectedTab.IsModified);
+            Assert.False(viewModel.SelectedQueryTab!.IsModified);
         }
 
         [Fact]
@@ -342,7 +344,7 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
             MainViewModel viewModel = CreateViewModel();
             viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
-            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 2";
             dialogService.SaveFileResult = @"C:\Archive\report-v2.sql";
 
             viewModel.SaveFileAsCommand.Execute(null);
@@ -350,8 +352,8 @@ namespace LightSQL.Tests
             Assert.Equal(("report.sql", (string?)@"C:\Scripts"), Assert.Single(dialogService.SaveFilePrompts));
             Assert.Equal("SELECT 1", fileService.Files[@"C:\Scripts\report.sql"].Text);
             Assert.Equal("SELECT 2", fileService.Files[@"C:\Archive\report-v2.sql"].Text);
-            Assert.Equal(@"C:\Archive\report-v2.sql", viewModel.SelectedTab.FilePath);
-            Assert.Equal("report-v2.sql", viewModel.SelectedTab.Header);
+            Assert.Equal(@"C:\Archive\report-v2.sql", viewModel.SelectedQueryTab!.FilePath);
+            Assert.Equal("report-v2.sql", viewModel.SelectedQueryTab!.Header);
         }
 
         [Fact]
@@ -360,7 +362,7 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\a.sql", "SELECT 'a'");
             MainViewModel viewModel = CreateViewModel();
             viewModel.OpenFiles(new[] { @"C:\Scripts\a.sql" });
-            QueryTabViewModel fileTab = viewModel.SelectedTab!;
+            QueryTabViewModel fileTab = viewModel.SelectedQueryTab!;
             fileTab.EditorText = "SELECT 'changed'";
             viewModel.NewQueryCommand.Execute(null);
 
@@ -377,13 +379,13 @@ namespace LightSQL.Tests
             fileService.AddFile(@"C:\Scripts\report.sql", "SELECT 1");
             MainViewModel viewModel = CreateViewModel();
             viewModel.OpenFiles(new[] { @"C:\Scripts\report.sql" });
-            viewModel.SelectedTab!.EditorText = "SELECT 2";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 2";
             fileService.WriteFailure = new UnauthorizedAccessException("Access denied.");
 
             viewModel.SaveFileCommand.Execute(null);
 
             Assert.Equal(1, dialogService.ErrorCount);
-            Assert.True(viewModel.SelectedTab.IsModified);
+            Assert.True(viewModel.SelectedQueryTab!.IsModified);
             Assert.Equal("SELECT 1", fileService.Files[@"C:\Scripts\report.sql"].Text);
         }
 
@@ -396,7 +398,7 @@ namespace LightSQL.Tests
             actions.OpenQueryTab("Sales", "SELECT TOP 1000 * FROM [dbo].[Orders]");
 
             Assert.Equal(2, viewModel.Tabs.Count);
-            QueryTabViewModel tab = viewModel.SelectedTab!;
+            QueryTabViewModel tab = viewModel.SelectedQueryTab!;
             Assert.Equal("Sales", tab.ActiveDatabase);
             Assert.Equal("SELECT TOP 1000 * FROM [dbo].[Orders]", tab.EditorText);
             Assert.False(tab.IsModified);
@@ -407,19 +409,19 @@ namespace LightSQL.Tests
         public async Task Execute_RunsSelectedTab_AgainstItsOwnDatabase()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
-            viewModel.SelectedTab!.ActiveDatabase = "Sales";
-            viewModel.SelectedTab.EditorText = "SELECT 'sales'";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "Sales";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 'sales'";
             viewModel.NewQueryCommand.Execute(null);
-            viewModel.SelectedTab!.ActiveDatabase = "HR";
-            viewModel.SelectedTab.EditorText = "SELECT 'hr'";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "HR";
+            viewModel.SelectedQueryTab!.EditorText = "SELECT 'hr'";
 
             await viewModel.ExecuteQueryCommand.ExecuteAsync(null);
 
             (string Sql, string? Database) batch = Assert.Single(sqlService.ExecutedBatches);
             Assert.Equal("SELECT 'hr'", batch.Sql);
             Assert.Equal("HR", batch.Database);
-            Assert.Single(viewModel.SelectedTab.Results.ResultViews);
-            Assert.Empty(viewModel.Tabs[0].Results.ResultViews);
+            Assert.Single(viewModel.SelectedQueryTab!.Results.ResultViews);
+            Assert.Empty(QueryTab(viewModel, 0).Results.ResultViews);
         }
 
         [Fact]
@@ -429,7 +431,7 @@ namespace LightSQL.Tests
             TaskCompletionSource<QueryExecutionResult> slowQuery = new();
             sqlService.ExecuteHandler = (sql, database, token) => slowQuery.Task;
 
-            QueryTabViewModel first = viewModel.SelectedTab!;
+            QueryTabViewModel first = viewModel.SelectedQueryTab!;
             first.EditorText = "SELECT 1";
             Task firstRun = viewModel.ExecuteQueryCommand.ExecuteAsync(null);
 
@@ -461,12 +463,12 @@ namespace LightSQL.Tests
                 return new QueryExecutionResult();
             };
 
-            QueryTabViewModel first = viewModel.SelectedTab!;
+            QueryTabViewModel first = viewModel.SelectedQueryTab!;
             first.EditorText = "WAITFOR DELAY '01:00:00'";
             Task firstRun = viewModel.ExecuteQueryCommand.ExecuteAsync(null);
 
             viewModel.NewQueryCommand.Execute(null);
-            QueryTabViewModel second = viewModel.SelectedTab!;
+            QueryTabViewModel second = viewModel.SelectedQueryTab!;
             second.EditorText = "WAITFOR DELAY '01:00:00'";
             Task secondRun = viewModel.ExecuteQueryCommand.ExecuteAsync(null);
 
@@ -484,43 +486,43 @@ namespace LightSQL.Tests
         public async Task RefreshDatabaseList_KeepsEachTabDatabase()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
-            viewModel.SelectedTab!.ActiveDatabase = "Sales";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "Sales";
             viewModel.NewQueryCommand.Execute(null);
-            viewModel.SelectedTab!.ActiveDatabase = "HR";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "HR";
 
             await viewModel.RefreshDatabaseListAsync();
 
-            Assert.Equal("Sales", viewModel.Tabs[0].ActiveDatabase);
-            Assert.Equal("HR", viewModel.Tabs[1].ActiveDatabase);
+            Assert.Equal("Sales", QueryTab(viewModel, 0).ActiveDatabase);
+            Assert.Equal("HR", QueryTab(viewModel, 1).ActiveDatabase);
         }
 
         [Fact]
         public async Task RefreshDatabaseList_DroppedDatabase_FallsBackToDefault()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
-            viewModel.SelectedTab!.ActiveDatabase = "HR";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "HR";
             sqlService.DatabaseNames.Remove("HR");
 
             await viewModel.RefreshDatabaseListAsync();
 
-            Assert.Equal("master", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Equal("master", viewModel.SelectedQueryTab!.ActiveDatabase);
         }
 
         [Fact]
         public async Task SwitchingTabs_SelectedTabShowsItsOwnDatabase()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
-            QueryTabViewModel first = viewModel.SelectedTab!;
+            QueryTabViewModel first = viewModel.SelectedQueryTab!;
             first.ActiveDatabase = "Sales";
             viewModel.NewQueryCommand.Execute(null);
-            QueryTabViewModel second = viewModel.SelectedTab!;
+            QueryTabViewModel second = viewModel.SelectedQueryTab!;
             second.ActiveDatabase = "HR";
 
             viewModel.SelectedTab = first;
-            Assert.Equal("Sales", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Equal("Sales", viewModel.SelectedQueryTab!.ActiveDatabase);
 
             viewModel.SelectedTab = second;
-            Assert.Equal("HR", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Equal("HR", viewModel.SelectedQueryTab!.ActiveDatabase);
         }
 
         [Fact]
@@ -531,10 +533,10 @@ namespace LightSQL.Tests
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
 
             // E.g. a database created after the list was loaded, reached with USE.
-            viewModel.SelectedTab!.ActiveDatabase = "Inventory";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "Inventory";
 
             Assert.Equal(new[] { "HR", "Inventory", "master", "Sales" }, viewModel.Databases);
-            Assert.Equal("Inventory", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Equal("Inventory", viewModel.SelectedQueryTab!.ActiveDatabase);
         }
 
         [Fact]
@@ -542,9 +544,9 @@ namespace LightSQL.Tests
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
 
-            viewModel.SelectedTab!.ActiveDatabase = "sales";
+            viewModel.SelectedQueryTab!.ActiveDatabase = "sales";
 
-            Assert.Equal("Sales", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Equal("Sales", viewModel.SelectedQueryTab!.ActiveDatabase);
             Assert.Single(viewModel.Databases, name => string.Equals(name, "Sales", StringComparison.OrdinalIgnoreCase));
         }
 
@@ -552,9 +554,9 @@ namespace LightSQL.Tests
         public async Task Execute_UseInBatch_ChangesOnlyThatTabDatabase()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
-            QueryTabViewModel first = viewModel.SelectedTab!;
+            QueryTabViewModel first = viewModel.SelectedQueryTab!;
             viewModel.NewQueryCommand.Execute(null);
-            QueryTabViewModel second = viewModel.SelectedTab!;
+            QueryTabViewModel second = viewModel.SelectedQueryTab!;
             second.EditorText = "USE HR;";
             sqlService.ExecuteHandler = (sql, database, token) =>
             {
@@ -570,7 +572,7 @@ namespace LightSQL.Tests
             Assert.Equal("master", first.ActiveDatabase);
 
             viewModel.SelectedTab = first;
-            Assert.Equal("master", viewModel.SelectedTab.ActiveDatabase);
+            Assert.Equal("master", viewModel.SelectedQueryTab!.ActiveDatabase);
         }
 
         [Fact]
@@ -581,7 +583,7 @@ namespace LightSQL.Tests
 
             await ConnectAsync(viewModel);
 
-            Assert.All(viewModel.Tabs, tab => Assert.Equal("master", tab.ActiveDatabase));
+            Assert.All(viewModel.QueryTabs, tab => Assert.Equal("master", tab.ActiveDatabase));
             Assert.Equal(sqlService.DatabaseNames, viewModel.Databases);
         }
 
@@ -594,7 +596,7 @@ namespace LightSQL.Tests
             viewModel.DisconnectCommand.Execute(null);
 
             Assert.Equal(2, viewModel.Tabs.Count);
-            Assert.All(viewModel.Tabs, tab => Assert.Null(tab.ActiveDatabase));
+            Assert.All(viewModel.QueryTabs, tab => Assert.Null(tab.ActiveDatabase));
             Assert.Empty(viewModel.Databases);
             Assert.False(viewModel.ExecuteQueryCommand.CanExecute(null));
         }
@@ -605,7 +607,7 @@ namespace LightSQL.Tests
             MainViewModel viewModel = CreateViewModel();
             viewModel.NewQueryCommand.Execute(null);
             viewModel.NewQueryCommand.Execute(null);
-            viewModel.Tabs[1].EditorText = "SELECT 1";
+            QueryTab(viewModel, 1).EditorText = "SELECT 1";
             dialogService.SaveChangesResult = SaveChangesChoice.Discard;
 
             bool canClose = viewModel.ConfirmCloseAll();
@@ -618,7 +620,7 @@ namespace LightSQL.Tests
         public void ConfirmCloseAll_Cancel_PreventsClosing()
         {
             MainViewModel viewModel = CreateViewModel();
-            viewModel.Tabs[0].EditorText = "SELECT 1";
+            QueryTab(viewModel, 0).EditorText = "SELECT 1";
             dialogService.SaveChangesResult = SaveChangesChoice.Cancel;
 
             Assert.False(viewModel.ConfirmCloseAll());
@@ -638,7 +640,20 @@ namespace LightSQL.Tests
                 fileService,
                 optionsService,
                 dialogService,
-                objectExplorer);
+                objectExplorer,
+                mcpHostFactory,
+                clipboardService);
+        }
+
+        /// <summary>
+        /// Returns the tab at an index as a query tab.
+        /// </summary>
+        /// <param name="viewModel">The main view model.</param>
+        /// <param name="index">The tab index.</param>
+        /// <returns>The query tab.</returns>
+        private static QueryTabViewModel QueryTab(MainViewModel viewModel, int index)
+        {
+            return Assert.IsType<QueryTabViewModel>(viewModel.Tabs[index]);
         }
 
         /// <summary>

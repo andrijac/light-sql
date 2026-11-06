@@ -13,9 +13,10 @@ src/LightSQL/
 ├─ LightSQL/                     The WPF application
 │  ├─ Models/                    Plain data types (DTOs, enums)
 │  ├─ Services/                  Infrastructure (SQL access, storage, dialogs)
+│  │  └─ Mcp/                    MCP server for AI clients (host, tools, port finder)
 │  ├─ ViewModels/               View models (MVVM)
 │  ├─ Views/                    Windows and user controls (XAML + code-behind)
-│  ├─ Controls/                 Custom WPF controls/panels (ResultGridsPanel)
+│  ├─ Controls/                 Custom WPF controls/panels (ResultGridsPanel, DocumentTabStyleSelector)
 │  ├─ Behaviors/                Attached behaviours (TreeViewRightClickSelection)
 │  ├─ Converters/               WPF value converters
 │  ├─ Resources/                Shared XAML resources (ObjectExplorerIcons.xaml)
@@ -34,6 +35,7 @@ src/LightSQL/
 | Microsoft.Data.SqlClient | SQL Server connectivity |
 | CommunityToolkit.Mvvm | `ObservableObject`, `[ObservableProperty]`, `[RelayCommand]` |
 | Microsoft.Extensions.DependencyInjection | Service / view-model wiring |
+| ModelContextProtocol.AspNetCore | MCP server (official C# SDK) hosted in Kestrel; brings the `Microsoft.AspNetCore.App` shared framework |
 
 Windows DPAPI (`System.Security.Cryptography.ProtectedData`) is provided by the
 `net10.0-windows` framework and is used to encrypt saved passwords.
@@ -43,8 +45,10 @@ Windows DPAPI (`System.Security.Cryptography.ProtectedData`) is provided by the
 `App.OnStartup` builds a `ServiceProvider` (see `App.xaml.cs`). Services and the
 main window are singletons; dialog view models are transient (a fresh instance per
 dialog). `MainWindow` is resolved from the container, which injects `MainViewModel`.
-Query tabs (`QueryTabViewModel`, each with its own `ResultsViewModel`) are created
-by `MainViewModel` at runtime and are not registered in the container.
+Query tabs (`QueryTabViewModel`, each with its own `ResultsViewModel`) and MCP
+server tabs (`McpServerTabViewModel`) are created by `MainViewModel` at runtime and
+are not registered in the container. `Func<ISqlConnectionService>` is registered so
+`McpServerHostFactory` can give every MCP server its own SQL service.
 
 ## Layers
 
@@ -59,7 +63,8 @@ by `MainViewModel` at runtime and are not registered in the container.
     `SqlConnection.Database` with the database it started in (read in a `finally`,
     so it also works when the batch failed) and reports a `USE` switch in
     `QueryExecutionResult.NewDatabaseContext` (static, unit-tested
-    `GetNewDatabaseContext`).
+    `GetNewDatabaseContext`). `ExecuteReadOnlyBatchAsync` runs a batch in a
+    transaction that is always rolled back (MCP read-only mode).
   - `IConnectionStore` / `ConnectionStore` — saved connections (JSON + DPAPI).
     Passwords are stripped from raw connection strings before saving; when the
     profile saves its password, the typed or embedded password is stored encrypted
@@ -75,28 +80,47 @@ by `MainViewModel` at runtime and are not registered in the container.
     palette dictionary in the application resources; `ISystemThemeProvider` /
     `WindowsSystemThemeProvider` report the Windows light/dark mode for the Auto
     theme; `WindowTitleBar` makes title bars dark. See [themes.md](themes.md).
-  - `ISqlStatementAnalyzer` / `SqlStatementAnalyzer` — UPDATE/DELETE-WHERE guard.
+  - `ISqlStatementAnalyzer` / `SqlStatementAnalyzer` — UPDATE/DELETE-WHERE guard,
+    and `FindWriteOperation` for the MCP server's read-only mode.
   - `ICredentialProtector` / `DpapiCredentialProtector` — DPAPI encrypt/decrypt.
   - `IDialogService` / `DialogService` — message boxes, text prompt, the Windows
     Open (multi-select) / Save As file dialogs, modal dialogs.
   - `ConnectionStringFactory` — builds connection strings from a profile.
+  - `IClipboardService` / `ClipboardService` — copies text (MCP client setup).
+  - `Mcp/` — `IMcpServerHostFactory` / `McpServerHostFactory` start an MCP server
+    (own `SqlConnectionService`, loopback port 9000+, stateless Streamable HTTP at
+    `/mcp`, Host/Origin guard); `McpDatabaseTools` (the tools), `McpResultFormatter`
+    (JSON), `McpPortFinder`, `McpRequestGuard`. See [mcp-server.md](mcp-server.md).
 - **ViewModels**
+  - `DocumentTabViewModel` — abstract base of every tab in the document strip
+    (`Header`, `ToolTip`, `DisplayName`, `IsSelected`, `OnClosed()` called after the
+    tab is removed).
   - `MainViewModel` — connection, database list, options, and the collection of
-    query tabs (`Tabs`, `SelectedTab`). Tab commands: `NewQuery`, `OpenFile`,
+    document tabs (`Tabs`, `SelectedTab`, both typed `DocumentTabViewModel`).
+    `QueryTabs` / `McpServerTabs` filter them by type and `SelectedQueryTab` is the
+    selected tab when it is a query tab (null for an MCP tab); the toolbar,
+    status bar, Execute, Cancel and Save act on `SelectedQueryTab`.
+    `StartMcpServer` / `OpenMcpServerTabAsync(database)` open an MCP server tab for
+    the connection profile remembered at Connect; `StopAllMcpServersAsync` runs
+    when the window closes. Disconnect leaves MCP servers running. Tab commands: `NewQuery`, `OpenFile`,
     `SaveFile`, `SaveFileAs` (both take an optional tab, default the selected one),
-    `CloseQuery`, `CloseOtherQueries`. `OpenFiles(paths)` is also used by window
+    `CloseQuery`, `CloseOtherQueries` (both take any tab; only query tabs prompt to save). `OpenFiles(paths)` is also used by window
     drag-and-drop and command-line arguments (`App.OnStartup`). It remembers the
     folder of the last file opened/saved for the next dialog. `ExecuteQuery` and
     `Cancel` act on the selected tab; `ExecuteQuery` allows concurrent executions so
     another tab can run while one is busy. `ConfirmCloseAll()` is called by the
     window's `Closing` handler to ask about unsaved tabs. Implements `IMainActions`
-    (`OpenQueryTab`, `ExecuteAsync`, `RefreshDatabaseListAsync`) for the Object
-    Explorer without a circular dependency. The toolbar dropdown binds
-    `SelectedItem` to `SelectedTab.ActiveDatabase`, so it follows the selected tab.
+    (`OpenQueryTab`, `ExecuteAsync`, `RefreshDatabaseListAsync`,
+    `OpenMcpServerTabAsync`) for the Object Explorer without a circular dependency. The toolbar dropdown binds
+    `SelectedItem` to `SelectedQueryTab.ActiveDatabase`, so it follows the selected tab.
     A `ComboBox` cannot select a value that is not in its items and then keeps
     showing the previous selection, so `MainViewModel` watches every tab's
     `ActiveDatabase` and adds a missing name to `Databases` (sorted, matched
     case-insensitively; a different-case spelling is replaced by the listed one).
+  - `McpServerTabViewModel` — one MCP server: state, port, endpoint, client setup
+    text and copy commands, activity log (tool calls posted to the UI thread),
+    access mode (read-only by default, `IsReadWrite` after confirmation).
+    Closing the tab stops the server.
   - `QueryTabViewModel` — one query document: `EditorText`, `SelectedText`, caret,
     `ActiveDatabase`, `FilePath` + `FileEncoding` (null until the tab is opened from
     or saved to a file), `DefaultTitle`/`DisplayName` (file name)/`Header`/`ToolTip`
@@ -115,10 +139,13 @@ by `MainViewModel` at runtime and are not registered in the container.
     chosen theme at once and `RevertThemePreview` (called when the dialog closes)
     restores the previous one unless the options were saved.
 - **Views**
-  - `MainWindow` — the shell. The query area is a `TabControl` re-templated to show
-    only the tab headers (name, *(executing)* marker, ✕ button, context menu), and
-    below it an `ItemsControl` with a `Grid` panel that holds **one `QueryTabView`
-    per tab**, only the selected one visible. A plain `TabControl` with
+  - `MainWindow` — the shell. The document area is a `TabControl` re-templated to
+    show only the tab headers, and below it an `ItemsControl` with a `Grid` panel
+    that holds **one view per tab** (`QueryTabView` or `McpServerTabView`, chosen by
+    implicit `DataTemplate`s per view-model type), only the selected one visible.
+    Header templates are also per type (query: name, *(executing)*, ✕; MCP: state
+    dot, name with port, ✕), and `DocumentTabStyleSelector` gives each type its own
+    `TabItem` style and context menu. A plain `TabControl` with
     `ItemsSource` would reuse a single content view for all tabs and lose each
     editor's undo history, caret, scroll and splitter position; keeping one live
     view per tab avoids that.
@@ -128,6 +155,7 @@ by `MainViewModel` at runtime and are not registered in the container.
     `SelectedText`, `CaretLine`, `CaretColumn`, `ShowLineNumbers`, `EditorFontSize`
     (the last two bind to `MainViewModel.ShowLineNumbers` / `EditorFontSize`, which
     are re-raised when Options are saved).
+  - `McpServerTabView` — MCP server details, client setup and activity grid.
   - `ConnectionDialog`, `OptionsDialog`, `InputDialog`.
 - **Controls** — `ResultGridsPanel` lays out the result grids: they fill the visible
   results area (one grid = whole pane, several share it equally), with a minimum

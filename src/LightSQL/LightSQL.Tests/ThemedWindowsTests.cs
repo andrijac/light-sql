@@ -71,6 +71,67 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public void MainWindow_ShowsMcpServerTab_UnderEveryTheme()
+        {
+            List<string> problems = StaThread.Run(() =>
+            {
+                List<string> found = new();
+
+                FakeDialogService dialogService = new() { ConnectionProfileResult = new ConnectionProfile { Server = "fake-server" } };
+                MainViewModel viewModel = CreateMainViewModel(dialogService);
+
+                // The fakes complete synchronously, so waiting here cannot deadlock.
+                viewModel.ConnectCommand.ExecuteAsync(null).GetAwaiter().GetResult();
+                viewModel.OpenMcpServerTabAsync("Sales").GetAwaiter().GetResult();
+
+                MainWindow window = new(viewModel);
+                ThemeService themeService = AttachThemes(window);
+
+                ShowOffScreen(window);
+
+                foreach (AppTheme theme in new[] { AppTheme.Light, AppTheme.Dark, AppTheme.Classic, AppTheme.Gradient })
+                {
+                    themeService.ApplyTheme(theme);
+                    DoEvents();
+
+                    McpServerTabView? view = FindVisualChildren<McpServerTabView>(window).FirstOrDefault();
+
+                    if (view is null || view.IsVisible == false)
+                    {
+                        found.Add($"{theme}: MCP server view not shown");
+
+                        continue;
+                    }
+
+                    if (FindVisualChildren<TextBox>(view).Any(box => box.Text == "http://127.0.0.1:9000/mcp") == false)
+                    {
+                        found.Add($"{theme}: endpoint not shown");
+                    }
+
+                    // The query editor of the other tab is hidden while the MCP tab is selected.
+                    if (FindVisualChildren<QueryTabView>(window).Any(queryView => queryView.IsVisible == true) == true)
+                    {
+                        found.Add($"{theme}: query view visible behind the MCP tab");
+                    }
+
+                    TabItem mcpTabItem = FindVisualChildren<TabItem>(window).Single(item => item.DataContext is McpServerTabViewModel);
+
+                    if (mcpTabItem.ContextMenu?.Items.OfType<MenuItem>().Any(item => (string)item.Header == "Stop Server") != true)
+                    {
+                        found.Add($"{theme}: MCP tab has no server context menu");
+                    }
+                }
+
+                window.Close();
+                Dispatcher.CurrentDispatcher.InvokeShutdown();
+
+                return found;
+            });
+
+            Assert.Empty(problems);
+        }
+
+        [Fact]
         public void Dialogs_RenderUnderEveryTheme()
         {
             StaThread.Run(() =>
@@ -192,8 +253,18 @@ namespace LightSQL.Tests
         /// <returns>The view model (one empty query tab).</returns>
         private static MainViewModel CreateMainViewModel()
         {
+            return CreateMainViewModel(new FakeDialogService());
+        }
+
+        /// <summary>
+        /// Creates a main view model wired to the test fakes, with a given dialog service
+        /// (e.g. one that returns a connection).
+        /// </summary>
+        /// <param name="dialogService">The dialog service fake.</param>
+        /// <returns>The view model (one empty query tab).</returns>
+        private static MainViewModel CreateMainViewModel(FakeDialogService dialogService)
+        {
             FakeSqlConnectionService sqlService = new();
-            FakeDialogService dialogService = new();
 
             return new MainViewModel(
                 sqlService,
@@ -201,7 +272,9 @@ namespace LightSQL.Tests
                 new FakeFileService(),
                 new FakeOptionsService(),
                 dialogService,
-                new ObjectExplorerViewModel(sqlService, dialogService));
+                new ObjectExplorerViewModel(sqlService, dialogService),
+                new FakeMcpServerHostFactory(),
+                new FakeClipboardService());
         }
     }
 }

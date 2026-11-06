@@ -41,6 +41,17 @@ LightSQL is designed so a **plaintext password is never written to disk**:
 - `ConnectionProfile.Password` is marked `[JsonIgnore]`; only `ProtectedPassword`
   is serialized.
 
+## MCP servers
+
+An MCP server started from LightSQL ([mcp-server.md](mcp-server.md)) signs in
+with the connection's credentials (kept in memory only, never shown or returned)
+and listens on 127.0.0.1 only; requests from other sites' web pages are rejected.
+It is **read-only by default** (data-changing statements are rejected and every
+batch is rolled back) until the user allows read-write in its tab. Any program on
+this computer can call it while it runs, and query results are sent to the AI
+client's model provider. Use a login with the least permissions needed, and stop
+servers you no longer use.
+
 ## Recommendations
 
 - Prefer Windows authentication where possible.

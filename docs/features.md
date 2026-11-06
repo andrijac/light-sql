@@ -18,7 +18,7 @@ stops, because the running app locks its `.exe` and the build could not replace 
 
 ```
 ┌ Menu: File | Edit | Query | Database | Tools | Help ───────────────────────────┐
-├ Toolbar: [Connect] [Database ▼] [Execute (F5)] [Cancel] [Open] [Save] ────────┤
+├ Toolbar: [Connect] [Database ▼] [Execute (F5)] [Cancel] [Open] [Save] [MCP Server] ┤
 ├ Object Explorer │ [SQLQuery1 ✕] [report.sql *✕] [SQLQuery3 ✕]   ← query tabs │
 │  (lazy tree)    │ SQL editor of the selected tab (line numbers, highlighting)  │
 │                 │ ═══════ splitter ═════════════════════════════════════════   │
@@ -52,6 +52,22 @@ database**, **own Results/Messages**, and its own execution and cancellation.
   **Cancel** always act on the selected tab. Closing an executing tab cancels its
   query.
 - If every tab is closed, a hint is shown; press Ctrl+N to start a new query.
+- **MCP server tabs** share the same strip (e.g. `● MCP SQL01 :9000`). While one
+  is selected, Execute / Cancel / Save and the toolbar database dropdown are
+  disabled and the status bar hides the query details. See
+  [mcp-server.md](mcp-server.md).
+
+## MCP server for AI clients
+
+**Database → Start MCP Server** (or the **MCP Server** toolbar button, or
+right-click in the Object Explorer) starts an MCP server for the current
+connection on the first free port from 9000 up, in a new tab. AI clients such as
+Claude Code or Codex connect to it and can list databases, tables and columns and
+run T-SQL from a chat. Servers are **read-only by default**; the tab's **Allow
+read-write** check box (with confirmation) lets the AI change data. The tab shows
+the connection, default database, access mode, port,
+endpoint, copy-ready client setup and a log of every tool call; closing the tab
+stops the server. Details: [mcp-server.md](mcp-server.md).
 
 ## Connecting
 
@@ -179,6 +195,9 @@ it is always clear which node the context menu acts on. Right-click a node for:
   and run it.
 - **New Database…** — prompt for a name and run `CREATE DATABASE`.
 - **Drop…** — drop a table, view or database (with confirmation).
+- **Start MCP Server** — start an MCP server whose default database is the node's
+  database (the connection's default on the server node). See
+  [mcp-server.md](mcp-server.md).
 - **Refresh** — reload the node's children.
 
 Creating databases is also available via **Database → New Database…**.

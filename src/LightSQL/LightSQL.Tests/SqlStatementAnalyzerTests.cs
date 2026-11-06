@@ -110,5 +110,54 @@ namespace LightSQL.Tests
             Assert.False(analyzer.HasUnguardedUpdateOrDelete(string.Empty));
             Assert.False(analyzer.HasUnguardedUpdateOrDelete("   "));
         }
+
+        [Theory]
+        [InlineData("SELECT * FROM Orders")]
+        [InlineData("select top 10 Id, Name from dbo.Customers where Name like 'A%' order by Name")]
+        [InlineData("WITH totals AS (SELECT CustomerId, SUM(Total) AS Total FROM Orders GROUP BY CustomerId) SELECT * FROM totals")]
+        [InlineData("DECLARE @from date = '2026-01-01'; SELECT COUNT(*) FROM Orders WHERE OrderDate >= @from")]
+        [InlineData("SET NOCOUNT ON; SELECT 1")]
+        [InlineData("IF EXISTS (SELECT 1 FROM sys.tables) SELECT name FROM sys.tables ELSE PRINT 'none'")]
+        [InlineData("SELECT 'INSERT INTO x; DROP TABLE y' AS Text")]
+        [InlineData("-- DELETE FROM Orders\nSELECT 1 /* UPDATE Orders SET x = 1 */")]
+        [InlineData("SELECT [Update], [Delete] FROM [Audit]")]
+        [InlineData("SELECT LastUpdated, IsDeleted FROM Orders")]
+        [InlineData("DECLARE @insert int = 1; SELECT @insert")]
+        [InlineData("USE Sales; SELECT * FROM Orders")]
+        [InlineData("")]
+        public void FindWriteOperation_AllowsReadingBatches(string sql)
+        {
+            Assert.Null(analyzer.FindWriteOperation(sql));
+        }
+
+        [Theory]
+        [InlineData("INSERT INTO Orders (Id) VALUES (1)", "INSERT")]
+        [InlineData("SELECT 1; UPDATE Orders SET Total = 0 WHERE Id = 1", "UPDATE")]
+        [InlineData("SELECT 1\ndelete from Orders where Id = 1", "DELETE")]
+        [InlineData("SELECT 1; MERGE Orders AS t USING Src AS s ON t.Id = s.Id WHEN MATCHED THEN DELETE;", "MERGE")]
+        [InlineData("SELECT 1; TRUNCATE TABLE Orders", "TRUNCATE")]
+        [InlineData("SELECT * INTO OrdersCopy FROM Orders", "INTO")]
+        [InlineData("SELECT 1; DROP TABLE Orders", "DROP")]
+        [InlineData("SELECT 1; CREATE TABLE T (Id int)", "CREATE")]
+        [InlineData("SELECT 1; ALTER TABLE Orders ADD X int", "ALTER")]
+        [InlineData("EXEC sp_who", "EXEC")]
+        [InlineData("SELECT 1; EXECUTE ('DELETE FROM Orders')", "EXECUTE")]
+        [InlineData("SELECT 1; COMMIT", "COMMIT")]
+        [InlineData("BEGIN TRAN; SELECT 1", "TRAN")]
+        [InlineData("SELECT 1; GRANT SELECT ON Orders TO public", "GRANT")]
+        [InlineData("SELECT * FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1')", "OPENROWSET")]
+        [InlineData("SELECT 1; DBCC CHECKDB", "DBCC")]
+        public void FindWriteOperation_BlocksStatementsThatChangeThings(string sql, string expected)
+        {
+            Assert.Equal(expected, analyzer.FindWriteOperation(sql));
+        }
+
+        [Fact]
+        public void FindWriteOperation_BlocksABareProcedureCall()
+        {
+            // T-SQL runs the first statement of a batch as a procedure without EXEC.
+            Assert.Equal("procedure call 'sp_configure'", analyzer.FindWriteOperation("sp_configure 'show advanced options', 1"));
+            Assert.Equal("procedure call", analyzer.FindWriteOperation("[dbo].[usp_Purge]"));
+        }
     }
 }

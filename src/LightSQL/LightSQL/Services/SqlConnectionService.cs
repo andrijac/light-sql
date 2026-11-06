@@ -96,93 +96,15 @@ namespace LightSQL.Services
         }
 
         /// <inheritdoc />
-        public async Task<QueryExecutionResult> ExecuteBatchAsync(string sql, string? database, CancellationToken cancellationToken)
+        public Task<QueryExecutionResult> ExecuteBatchAsync(string sql, string? database, CancellationToken cancellationToken)
         {
-            EnsureConnected();
+            return ExecuteCoreAsync(sql, database, false, cancellationToken);
+        }
 
-            QueryExecutionResult result = new();
-            StringBuilder messages = new();
-            Stopwatch stopwatch = Stopwatch.StartNew();
-
-            // Fall back to the connection's default database when none is given.
-            string? targetDatabase = string.IsNullOrWhiteSpace(database) == true ? currentDatabase : database;
-
-            try
-            {
-                string connectionString = ConnectionStringFactory.Build(activeProfile!, targetDatabase);
-
-                await using SqlConnection connection = new(connectionString);
-
-                // PRINT output and warnings surface through InfoMessage.
-                connection.InfoMessage += (sender, args) => AppendInfoMessages(messages, args);
-
-                await connection.OpenAsync(cancellationToken);
-
-                // The database the batch starts in; compared afterwards to detect USE.
-                string startDatabase = connection.Database;
-
-                try
-                {
-                    await using SqlCommand command = new(sql, connection)
-                    {
-                        CommandTimeout = 0
-                    };
-
-                    await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-
-                    do
-                    {
-                        if (reader.FieldCount > 0)
-                        {
-                            DataTable table = await ReadResultSetAsync(reader, cancellationToken);
-                            result.ResultTables.Add(table);
-                        }
-                    }
-                    while (await reader.NextResultAsync(cancellationToken));
-
-                    int affected = reader.RecordsAffected;
-                    result.RecordsAffected = affected < 0 ? 0 : affected;
-                    result.IsSuccess = true;
-                }
-                finally
-                {
-                    // SqlConnection.Database follows USE statements. Read it here, while
-                    // the connection is still open, so a switch is reported even when a
-                    // later statement in the batch failed.
-                    result.NewDatabaseContext = GetNewDatabaseContext(startDatabase, connection.Database);
-                }
-
-                if (result.ResultTables.Count == 0)
-                {
-                    messages.AppendLine($"({result.RecordsAffected} row(s) affected)");
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Propagate cancellation so the caller can report it distinctly.
-                throw;
-            }
-            catch (SqlException ex)
-            {
-                if (cancellationToken.IsCancellationRequested == true)
-                {
-                    throw new OperationCanceledException(cancellationToken);
-                }
-
-                result.IsSuccess = false;
-                AppendSqlErrors(messages, ex);
-            }
-            catch (Exception ex)
-            {
-                result.IsSuccess = false;
-                messages.AppendLine(ex.Message);
-            }
-
-            stopwatch.Stop();
-            result.Elapsed = stopwatch.Elapsed;
-            result.Messages = messages.ToString().TrimEnd();
-
-            return result;
+        /// <inheritdoc />
+        public Task<QueryExecutionResult> ExecuteReadOnlyBatchAsync(string sql, string? database, CancellationToken cancellationToken)
+        {
+            return ExecuteCoreAsync(sql, database, true, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -319,6 +241,108 @@ namespace LightSQL.Services
             }
 
             return endDatabase;
+        }
+
+        /// <summary>
+        /// Executes a batch on its own pooled connection and collects its result sets,
+        /// messages and timing.
+        /// </summary>
+        /// <param name="sql">The SQL batch to run.</param>
+        /// <param name="database">The database to run in, or null for <see cref="CurrentDatabase"/>.</param>
+        /// <param name="rollBack">True to run inside a transaction that is always rolled back.</param>
+        /// <param name="cancellationToken">Token to cancel execution.</param>
+        /// <returns>The execution result.</returns>
+        private async Task<QueryExecutionResult> ExecuteCoreAsync(string sql, string? database, bool rollBack, CancellationToken cancellationToken)
+        {
+            EnsureConnected();
+
+            QueryExecutionResult result = new();
+            StringBuilder messages = new();
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            // Fall back to the connection's default database when none is given.
+            string? targetDatabase = string.IsNullOrWhiteSpace(database) == true ? currentDatabase : database;
+
+            try
+            {
+                string connectionString = ConnectionStringFactory.Build(activeProfile!, targetDatabase);
+
+                await using SqlConnection connection = new(connectionString);
+
+                // PRINT output and warnings surface through InfoMessage.
+                connection.InfoMessage += (sender, args) => AppendInfoMessages(messages, args);
+
+                await connection.OpenAsync(cancellationToken);
+
+                // The database the batch starts in; compared afterwards to detect USE.
+                string startDatabase = connection.Database;
+
+                // Read-only mode: everything the batch does is undone afterwards.
+                SqlTransaction? transaction = rollBack == true ? connection.BeginTransaction() : null;
+
+                try
+                {
+                    await using (SqlCommand command = new(sql, connection) { CommandTimeout = 0, Transaction = transaction })
+                    {
+                        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+                        do
+                        {
+                            if (reader.FieldCount > 0)
+                            {
+                                DataTable table = await ReadResultSetAsync(reader, cancellationToken);
+                                result.ResultTables.Add(table);
+                            }
+                        }
+                        while (await reader.NextResultAsync(cancellationToken));
+
+                        int affected = reader.RecordsAffected;
+                        result.RecordsAffected = affected < 0 ? 0 : affected;
+                        result.IsSuccess = true;
+                    }
+                }
+                finally
+                {
+                    // SqlConnection.Database follows USE statements. Read it here, while
+                    // the connection is still open, so a switch is reported even when a
+                    // later statement in the batch failed.
+                    result.NewDatabaseContext = GetNewDatabaseContext(startDatabase, connection.Database);
+
+                    // The reader is closed by now, so the transaction can be rolled back.
+                    RollBackQuietly(transaction);
+                }
+
+                if (result.ResultTables.Count == 0)
+                {
+                    messages.AppendLine($"({result.RecordsAffected} row(s) affected)");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Propagate cancellation so the caller can report it distinctly.
+                throw;
+            }
+            catch (SqlException ex)
+            {
+                if (cancellationToken.IsCancellationRequested == true)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
+                result.IsSuccess = false;
+                AppendSqlErrors(messages, ex);
+            }
+            catch (Exception ex)
+            {
+                result.IsSuccess = false;
+                messages.AppendLine(ex.Message);
+            }
+
+            stopwatch.Stop();
+            result.Elapsed = stopwatch.Elapsed;
+            result.Messages = messages.ToString().TrimEnd();
+
+            return result;
         }
 
         /// <summary>
@@ -479,6 +503,40 @@ namespace LightSQL.Services
             {
                 messages.AppendLine($"Msg {error.Number}, Level {error.Class}, State {error.State}, Line {error.LineNumber}");
                 messages.AppendLine(error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Rolls back and disposes a read-only batch's transaction. A transaction the
+        /// server already ended (e.g. after a severe error) cannot be rolled back
+        /// again; that is ignored, as there is nothing left to undo.
+        /// </summary>
+        /// <param name="transaction">The transaction, or null when none was used.</param>
+        private static void RollBackQuietly(SqlTransaction? transaction)
+        {
+            if (transaction is null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (transaction.Connection is not null)
+                {
+                    transaction.Rollback();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Already completed by the server.
+            }
+            catch (SqlException)
+            {
+                // The connection is broken; the server rolls the transaction back itself.
+            }
+            finally
+            {
+                transaction.Dispose();
             }
         }
 

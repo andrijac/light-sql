@@ -59,6 +59,18 @@ namespace LightSQL.Services
         Task<QueryExecutionResult> ExecuteBatchAsync(string sql, string? database, CancellationToken cancellationToken);
 
         /// <summary>
+        /// Executes a SQL batch like <see cref="ExecuteBatchAsync"/>, but inside a
+        /// transaction that is always rolled back, so whatever the batch changes is
+        /// undone. Used by the read-only mode of the MCP server as a safety net
+        /// behind the statement check.
+        /// </summary>
+        /// <param name="sql">The SQL batch to run.</param>
+        /// <param name="database">The database to run in, or null for <see cref="CurrentDatabase"/>.</param>
+        /// <param name="cancellationToken">Token to cancel execution.</param>
+        /// <returns>The execution result.</returns>
+        Task<QueryExecutionResult> ExecuteReadOnlyBatchAsync(string sql, string? database, CancellationToken cancellationToken);
+
+        /// <summary>
         /// Lists the online databases on the connected server.
         /// </summary>
         /// <param name="cancellationToken">Token to cancel the lookup.</param>

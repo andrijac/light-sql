@@ -6,13 +6,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Mcp;
 
 namespace LightSQL.ViewModels
 {
     /// <summary>
-    /// The main window's view model. Orchestrates the connection, the query tabs
-    /// (SSMS-style documents backed by .sql files: New, Open, Save, Save As),
-    /// options and the Object Explorer.
+    /// The main window's view model. Orchestrates the connection, the document tabs
+    /// (SSMS-style query documents backed by .sql files: New, Open, Save, Save As;
+    /// and MCP server tabs), options and the Object Explorer.
     /// </summary>
     public partial class MainViewModel : ObservableObject, IMainActions
     {
@@ -21,6 +22,14 @@ namespace LightSQL.ViewModels
         private readonly IFileService fileService;
         private readonly IOptionsService optionsService;
         private readonly IDialogService dialogService;
+        private readonly IMcpServerHostFactory mcpHostFactory;
+        private readonly IClipboardService clipboardService;
+
+        /// <summary>
+        /// The connection used by the last successful Connect; MCP servers are
+        /// started with it. Null when disconnected.
+        /// </summary>
+        private ConnectionProfile? connectedProfile;
 
         /// <summary>
         /// The folder of the last file opened or saved, offered first by the next
@@ -37,6 +46,7 @@ namespace LightSQL.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(ExecuteQueryCommand))]
         [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartMcpServerCommand))]
         private bool isConnected;
 
         [ObservableProperty]
@@ -44,7 +54,9 @@ namespace LightSQL.ViewModels
         [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
         [NotifyCanExecuteChangedFor(nameof(SaveFileCommand))]
         [NotifyCanExecuteChangedFor(nameof(SaveFileAsCommand))]
-        private QueryTabViewModel? selectedTab;
+        [NotifyPropertyChangedFor(nameof(SelectedQueryTab))]
+        [NotifyPropertyChangedFor(nameof(IsQueryTabSelected))]
+        private DocumentTabViewModel? selectedTab;
 
         [ObservableProperty]
         private string connectionStatus = "Not connected";
@@ -66,25 +78,31 @@ namespace LightSQL.ViewModels
         /// <param name="optionsService">Application options.</param>
         /// <param name="dialogService">User prompts and dialogs.</param>
         /// <param name="objectExplorer">The Object Explorer view model.</param>
+        /// <param name="mcpHostFactory">Starts MCP servers for the connection.</param>
+        /// <param name="clipboardService">Clipboard access for the MCP tabs.</param>
         public MainViewModel(
             ISqlConnectionService sqlService,
             ISqlStatementAnalyzer statementAnalyzer,
             IFileService fileService,
             IOptionsService optionsService,
             IDialogService dialogService,
-            ObjectExplorerViewModel objectExplorer)
+            ObjectExplorerViewModel objectExplorer,
+            IMcpServerHostFactory mcpHostFactory,
+            IClipboardService clipboardService)
         {
             this.sqlService = sqlService;
             this.statementAnalyzer = statementAnalyzer;
             this.fileService = fileService;
             this.optionsService = optionsService;
             this.dialogService = dialogService;
+            this.mcpHostFactory = mcpHostFactory;
+            this.clipboardService = clipboardService;
 
             ObjectExplorer = objectExplorer;
             ObjectExplorer.MainActions = this;
 
             // Start with one empty query, like SSMS's "New Query".
-            AddTab(null, string.Empty);
+            AddQueryTab(null, string.Empty);
         }
 
         /// <summary>
@@ -93,9 +111,55 @@ namespace LightSQL.ViewModels
         public ObjectExplorerViewModel ObjectExplorer { get; }
 
         /// <summary>
+        /// The open document tabs (query tabs and MCP server tabs), in display order.
+        /// </summary>
+        public ObservableCollection<DocumentTabViewModel> Tabs { get; } = new();
+
+        /// <summary>
         /// The open query tabs, in display order.
         /// </summary>
-        public ObservableCollection<QueryTabViewModel> Tabs { get; } = new();
+        public IEnumerable<QueryTabViewModel> QueryTabs
+        {
+            get
+            {
+                return Tabs.OfType<QueryTabViewModel>();
+            }
+        }
+
+        /// <summary>
+        /// The open MCP server tabs, in display order.
+        /// </summary>
+        public IEnumerable<McpServerTabViewModel> McpServerTabs
+        {
+            get
+            {
+                return Tabs.OfType<McpServerTabViewModel>();
+            }
+        }
+
+        /// <summary>
+        /// The selected tab when it is a query tab; null when no tab or another kind
+        /// of tab (e.g. an MCP server) is selected. The toolbar database dropdown,
+        /// Execute/Cancel/Save and the status bar act on this tab.
+        /// </summary>
+        public QueryTabViewModel? SelectedQueryTab
+        {
+            get
+            {
+                return SelectedTab as QueryTabViewModel;
+            }
+        }
+
+        /// <summary>
+        /// Whether the selected tab is a query tab (shows its execution details in the status bar).
+        /// </summary>
+        public bool IsQueryTabSelected
+        {
+            get
+            {
+                return SelectedQueryTab is not null;
+            }
+        }
 
         /// <summary>
         /// The databases available on the connected server (toolbar dropdown).
@@ -149,7 +213,44 @@ namespace LightSQL.ViewModels
         /// <inheritdoc />
         public void OpenQueryTab(string? database, string sql)
         {
-            AddTab(EnsureDatabaseListed(database), sql);
+            AddQueryTab(EnsureDatabaseListed(database), sql);
+        }
+
+        /// <inheritdoc />
+        public async Task OpenMcpServerTabAsync(string? database)
+        {
+            if (connectedProfile is null || IsConnected == false)
+            {
+                dialogService.ShowInformation("Connect to a server first.", "Not Connected");
+
+                return;
+            }
+
+            McpServerTabViewModel tab = new(
+                mcpHostFactory,
+                clipboardService,
+                dialogService,
+                connectedProfile,
+                sqlService.ServerName ?? connectedProfile.Server,
+                database);
+
+            AddDocumentTab(tab);
+            StatusMessage = "Starting MCP server...";
+
+            await tab.StartAsync();
+
+            StatusMessage = tab.State == McpServerState.Running
+                ? $"MCP server listening on {tab.Endpoint}"
+                : "MCP server could not start";
+        }
+
+        /// <summary>
+        /// Stops every running MCP server (when the application closes).
+        /// </summary>
+        /// <returns>A task that completes when all servers have stopped.</returns>
+        public Task StopAllMcpServersAsync()
+        {
+            return Task.WhenAll(McpServerTabs.Select(tab => tab.StopAsync()).ToList());
         }
 
         /// <summary>
@@ -171,12 +272,12 @@ namespace LightSQL.ViewModels
         /// <inheritdoc />
         public Task ExecuteAsync()
         {
-            if (SelectedTab is null)
+            if (SelectedQueryTab is null)
             {
                 return Task.CompletedTask;
             }
 
-            return SelectedTab.ExecuteAsync();
+            return SelectedQueryTab.ExecuteAsync();
         }
 
         /// <inheritdoc />
@@ -193,7 +294,7 @@ namespace LightSQL.ViewModels
 
                 // Remember each tab's database: clearing the list makes the toolbar
                 // dropdown push a null selection into the selected tab.
-                Dictionary<QueryTabViewModel, string?> previous = Tabs.ToDictionary(tab => tab, tab => tab.ActiveDatabase);
+                Dictionary<QueryTabViewModel, string?> previous = QueryTabs.ToDictionary(tab => tab, tab => tab.ActiveDatabase);
 
                 Databases.Clear();
 
@@ -207,7 +308,7 @@ namespace LightSQL.ViewModels
                     ? current
                     : Databases.FirstOrDefault();
 
-                foreach (QueryTabViewModel tab in Tabs)
+                foreach (QueryTabViewModel tab in QueryTabs)
                 {
                     string? remembered = previous[tab];
                     tab.ActiveDatabase = remembered is not null && Databases.Contains(remembered) == true ? remembered : fallback;
@@ -226,7 +327,7 @@ namespace LightSQL.ViewModels
         /// <returns>True when it is OK to close; false when the user cancelled.</returns>
         public bool ConfirmCloseAll()
         {
-            foreach (QueryTabViewModel tab in Tabs.ToList())
+            foreach (QueryTabViewModel tab in QueryTabs.ToList())
             {
                 if (tab.IsModified == false)
                 {
@@ -267,6 +368,7 @@ namespace LightSQL.ViewModels
 
                 IsConnected = true;
                 ConnectionStatus = info;
+                connectedProfile = profile;
 
                 await RefreshDatabaseListAsync();
                 ObjectExplorer.Build(sqlService.ServerName ?? profile.Server);
@@ -283,7 +385,9 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Disconnects from the current server. Open tabs stay open but lose their database.
+        /// Disconnects from the current server. Open query tabs stay open but lose
+        /// their database. Running MCP servers keep running: each has its own
+        /// connection and is stopped from its tab.
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanDisconnect))]
         private void Disconnect()
@@ -291,9 +395,10 @@ namespace LightSQL.ViewModels
             sqlService.Disconnect();
             IsConnected = false;
             ConnectionStatus = "Not connected";
+            connectedProfile = null;
             Databases.Clear();
 
-            foreach (QueryTabViewModel tab in Tabs)
+            foreach (QueryTabViewModel tab in QueryTabs)
             {
                 tab.ActiveDatabase = null;
             }
@@ -319,7 +424,20 @@ namespace LightSQL.ViewModels
         [RelayCommand(CanExecute = nameof(CanCancel))]
         private void Cancel()
         {
-            SelectedTab?.CancelExecution();
+            SelectedQueryTab?.CancelExecution();
+        }
+
+        /// <summary>
+        /// Starts an MCP server for the current connection in a new tab, using the
+        /// selected query tab's database as the server's default database.
+        /// </summary>
+        /// <returns>A task that completes when the server is running or has failed.</returns>
+        [RelayCommand(CanExecute = nameof(CanDisconnect))]
+        private Task StartMcpServerAsync()
+        {
+            string? database = SelectedQueryTab?.ActiveDatabase ?? sqlService.CurrentDatabase;
+
+            return OpenMcpServerTabAsync(database);
         }
 
         /// <summary>
@@ -328,14 +446,14 @@ namespace LightSQL.ViewModels
         [RelayCommand]
         private void NewQuery()
         {
-            string? database = SelectedTab?.ActiveDatabase;
+            string? database = SelectedQueryTab?.ActiveDatabase;
 
             if (database is null && IsConnected == true)
             {
                 database = sqlService.CurrentDatabase;
             }
 
-            AddTab(database, string.Empty);
+            AddQueryTab(database, string.Empty);
             StatusMessage = "New query";
         }
 
@@ -345,7 +463,7 @@ namespace LightSQL.ViewModels
         [RelayCommand]
         private void OpenFile()
         {
-            IReadOnlyList<string> paths = dialogService.ShowOpenFileDialog(GetDialogDirectory(SelectedTab));
+            IReadOnlyList<string> paths = dialogService.ShowOpenFileDialog(GetDialogDirectory(SelectedQueryTab));
 
             OpenFiles(paths);
         }
@@ -358,7 +476,7 @@ namespace LightSQL.ViewModels
         [RelayCommand(CanExecute = nameof(HasSelectedTab))]
         private void SaveFile(QueryTabViewModel? tab)
         {
-            QueryTabViewModel? target = tab ?? SelectedTab;
+            QueryTabViewModel? target = tab ?? SelectedQueryTab;
 
             if (target is not null)
             {
@@ -374,7 +492,7 @@ namespace LightSQL.ViewModels
         [RelayCommand(CanExecute = nameof(HasSelectedTab))]
         private void SaveFileAs(QueryTabViewModel? tab)
         {
-            QueryTabViewModel? target = tab ?? SelectedTab;
+            QueryTabViewModel? target = tab ?? SelectedQueryTab;
 
             if (target is not null)
             {
@@ -383,14 +501,15 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Closes a query tab (the selected one when none is given), asking to save
-        /// unsaved changes first and cancelling its execution if it is running.
+        /// Closes a tab (the selected one when none is given). A query tab asks to
+        /// save unsaved changes first and cancels its execution if it is running; an
+        /// MCP server tab stops its server.
         /// </summary>
         /// <param name="tab">The tab to close, or null for the selected tab.</param>
         [RelayCommand]
-        private void CloseQuery(QueryTabViewModel? tab)
+        private void CloseQuery(DocumentTabViewModel? tab)
         {
-            QueryTabViewModel? target = tab ?? SelectedTab;
+            DocumentTabViewModel? target = tab ?? SelectedTab;
 
             if (target is null)
             {
@@ -410,19 +529,19 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <param name="tab">The tab to keep, or null for the selected tab.</param>
         [RelayCommand]
-        private void CloseOtherQueries(QueryTabViewModel? tab)
+        private void CloseOtherQueries(DocumentTabViewModel? tab)
         {
-            QueryTabViewModel? keep = tab ?? SelectedTab;
+            DocumentTabViewModel? keep = tab ?? SelectedTab;
 
             if (keep is null)
             {
                 return;
             }
 
-            foreach (QueryTabViewModel other in Tabs.Where(candidate => candidate != keep).ToList())
+            foreach (DocumentTabViewModel other in Tabs.Where(candidate => candidate != keep).ToList())
             {
                 // Show the tab being asked about; stop on Cancel like SSMS.
-                if (other.IsModified == true)
+                if (other is QueryTabViewModel { IsModified: true })
                 {
                     SelectedTab = other;
                 }
@@ -460,7 +579,7 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <param name="oldValue">The previously selected tab.</param>
         /// <param name="newValue">The newly selected tab.</param>
-        partial void OnSelectedTabChanged(QueryTabViewModel? oldValue, QueryTabViewModel? newValue)
+        partial void OnSelectedTabChanged(DocumentTabViewModel? oldValue, DocumentTabViewModel? newValue)
         {
             if (oldValue is not null)
             {
@@ -474,12 +593,12 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Creates a tab, adds it after the existing tabs and selects it.
+        /// Creates a query tab, adds it after the existing tabs and selects it.
         /// </summary>
         /// <param name="database">The tab's database, or null.</param>
         /// <param name="sql">The initial SQL text.</param>
         /// <returns>The new tab.</returns>
-        private QueryTabViewModel AddTab(string? database, string sql)
+        private QueryTabViewModel AddQueryTab(string? database, string sql)
         {
             QueryTabViewModel tab = new(
                 sqlService,
@@ -494,20 +613,30 @@ namespace LightSQL.ViewModels
             tab.LoadText(sql);
             tab.PropertyChanged += OnTabPropertyChanged;
 
-            Tabs.Add(tab);
-            OnPropertyChanged(nameof(HasTabs));
-
-            SelectedTab = tab;
+            AddDocumentTab(tab);
 
             return tab;
         }
 
         /// <summary>
-        /// Removes a tab without prompting, cancelling its execution, and selects the
-        /// neighbouring tab when the removed one was selected.
+        /// Adds a tab of any kind after the existing tabs and selects it.
+        /// </summary>
+        /// <param name="tab">The tab to add.</param>
+        private void AddDocumentTab(DocumentTabViewModel tab)
+        {
+            Tabs.Add(tab);
+            OnPropertyChanged(nameof(HasTabs));
+
+            SelectedTab = tab;
+        }
+
+        /// <summary>
+        /// Removes a tab without prompting, lets it release what it holds (cancel a
+        /// running query, stop an MCP server), and selects the neighbouring tab when
+        /// the removed one was selected.
         /// </summary>
         /// <param name="tab">The tab to remove.</param>
-        private void RemoveTab(QueryTabViewModel tab)
+        private void RemoveTab(DocumentTabViewModel tab)
         {
             int index = Tabs.IndexOf(tab);
 
@@ -518,7 +647,7 @@ namespace LightSQL.ViewModels
 
             bool wasSelected = SelectedTab == tab;
 
-            tab.CancelExecution();
+            tab.OnClosed();
             tab.PropertyChanged -= OnTabPropertyChanged;
             tab.IsSelected = false;
 
@@ -536,20 +665,21 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <param name="tab">The tab about to be closed.</param>
         /// <returns>True when the tab may be closed; false when the user cancelled.</returns>
-        private bool ConfirmSaveIfModified(QueryTabViewModel tab)
+        private bool ConfirmSaveIfModified(DocumentTabViewModel tab)
         {
-            if (tab.IsModified == false)
+            // Only query tabs have content to save.
+            if (tab is not QueryTabViewModel queryTab || queryTab.IsModified == false)
             {
                 return true;
             }
 
-            SaveChangesChoice choice = dialogService.ConfirmSaveChanges(tab.DisplayName);
+            SaveChangesChoice choice = dialogService.ConfirmSaveChanges(queryTab.DisplayName);
 
             switch (choice)
             {
                 case SaveChangesChoice.Save:
                 {
-                    return SaveTab(tab);
+                    return SaveTab(queryTab);
                 }
 
                 case SaveChangesChoice.Discard:
@@ -584,7 +714,7 @@ namespace LightSQL.ViewModels
                 return;
             }
 
-            QueryTabViewModel? existing = Tabs.FirstOrDefault(
+            QueryTabViewModel? existing = QueryTabs.FirstOrDefault(
                 tab => tab.FilePath is not null && string.Equals(tab.FilePath, fullPath, StringComparison.OrdinalIgnoreCase) == true);
 
             if (existing is not null)
@@ -608,9 +738,9 @@ namespace LightSQL.ViewModels
                 return;
             }
 
-            QueryTabViewModel target = SelectedTab is not null && SelectedTab.IsPristine == true
-                ? SelectedTab
-                : AddTab(SelectedTab?.ActiveDatabase, string.Empty);
+            QueryTabViewModel target = SelectedQueryTab is not null && SelectedQueryTab.IsPristine == true
+                ? SelectedQueryTab
+                : AddQueryTab(SelectedQueryTab?.ActiveDatabase, string.Empty);
 
             target.LoadFile(fullPath, content);
             lastFileDirectory = Path.GetDirectoryName(fullPath);
@@ -764,7 +894,7 @@ namespace LightSQL.ViewModels
         /// <returns>True when connected and the selected tab is not already executing.</returns>
         private bool CanExecuteQuery()
         {
-            return IsConnected == true && SelectedTab is not null && SelectedTab.IsExecuting == false;
+            return IsConnected == true && SelectedQueryTab is not null && SelectedQueryTab.IsExecuting == false;
         }
 
         /// <summary>
@@ -773,11 +903,11 @@ namespace LightSQL.ViewModels
         /// <returns>True while the selected tab is executing.</returns>
         private bool CanCancel()
         {
-            return SelectedTab is not null && SelectedTab.IsExecuting == true;
+            return SelectedQueryTab is not null && SelectedQueryTab.IsExecuting == true;
         }
 
         /// <summary>
-        /// Whether a disconnect is possible now.
+        /// Whether a disconnect (or starting an MCP server) is possible now.
         /// </summary>
         /// <returns>True when connected.</returns>
         private bool CanDisconnect()
@@ -786,12 +916,12 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Whether a tab is selected (for tab-level commands such as Save).
+        /// Whether a query tab is selected (for query commands such as Save).
         /// </summary>
-        /// <returns>True when a tab is selected.</returns>
+        /// <returns>True when a query tab is selected.</returns>
         private bool HasSelectedTab()
         {
-            return SelectedTab is not null;
+            return SelectedQueryTab is not null;
         }
     }
 }

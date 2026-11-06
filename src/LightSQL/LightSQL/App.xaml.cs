@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using LightSQL.Services;
+using LightSQL.Services.Mcp;
 using LightSQL.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -73,6 +74,12 @@ namespace LightSQL
             services.AddSingleton<IDialogService, DialogService>();
             services.AddSingleton<ISystemThemeProvider, WindowsSystemThemeProvider>();
             services.AddSingleton<IThemeService, ThemeService>();
+            services.AddSingleton<IClipboardService, ClipboardService>();
+
+            // MCP servers: each one gets its own SQL service (its own connection state),
+            // so it is independent of the connection used by the query tabs.
+            services.AddSingleton<Func<ISqlConnectionService>>(() => new SqlConnectionService());
+            services.AddSingleton<IMcpServerHostFactory, McpServerHostFactory>();
 
             // View models. Query tabs (and their ResultsViewModel) are created by
             // MainViewModel, one per open query, so they are not registered here.
