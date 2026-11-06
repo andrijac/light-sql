@@ -1,0 +1,98 @@
+<!--
+    Gradient palette: a "fancy" dark theme. The window background is a diagonal
+    indigo / violet / teal gradient; panels, inputs and the editor are translucent
+    so the gradient shows through. Popups (menus, dropdowns, tooltips) are opaque
+    so their text stays readable.
+    Defines the same keys as every other palette (see Light.xaml).
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <sys:String x:Key="Theme.Name">Gradient</sys:String>
+
+    <CornerRadius x:Key="Theme.CornerRadius">4</CornerRadius>
+
+    <!-- Window and text -->
+    <LinearGradientBrush x:Key="Theme.WindowBackground" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="#FF1A1446" />
+        <GradientStop Offset="0.45" Color="#FF3B1A6B" />
+        <GradientStop Offset="1" Color="#FF0B4F6C" />
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Theme.Foreground" Color="#FFF3F0FF" />
+    <SolidColorBrush x:Key="Theme.SecondaryForeground" Color="#FFB9B3D9" />
+    <SolidColorBrush x:Key="Theme.DisabledForeground" Color="#FF7D769E" />
+    <SolidColorBrush x:Key="Theme.ErrorForeground" Color="#FFFF8FA3" />
+    <SolidColorBrush x:Key="Theme.SuccessForeground" Color="#FF6EE7B7" />
+
+    <!-- Surfaces and inputs (translucent) -->
+    <SolidColorBrush x:Key="Theme.PanelBackground" Color="#40100A2E" />
+    <SolidColorBrush x:Key="Theme.ControlBackground" Color="#8C0E0A26" />
+    <SolidColorBrush x:Key="Theme.ControlBorder" Color="#4DC4B5FD" />
+    <SolidColorBrush x:Key="Theme.ControlHoverBorder" Color="#FFB794F6" />
+    <SolidColorBrush x:Key="Theme.FocusBorder" Color="#FFE879F9" />
+
+    <!-- Accent -->
+    <SolidColorBrush x:Key="Theme.Accent" Color="#FFC084FC" />
+    <SolidColorBrush x:Key="Theme.AccentForeground" Color="#FF1A1446" />
+
+    <!-- Buttons -->
+    <SolidColorBrush x:Key="Theme.ButtonBackground" Color="#26FFFFFF" />
+    <SolidColorBrush x:Key="Theme.ButtonBorder" Color="#4DFFFFFF" />
+    <SolidColorBrush x:Key="Theme.ButtonHoverBackground" Color="#40FFFFFF" />
+    <SolidColorBrush x:Key="Theme.ButtonPressedBackground" Color="#80C084FC" />
+
+    <!-- Hover and selection -->
+    <SolidColorBrush x:Key="Theme.HoverBackground" Color="#26FFFFFF" />
+    <SolidColorBrush x:Key="Theme.SelectionBackground" Color="#FF7C3AED" />
+    <SolidColorBrush x:Key="Theme.SelectionForeground" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Theme.InactiveSelectionBackground" Color="#667C3AED" />
+
+    <!-- Menus, toolbar, status bar -->
+    <SolidColorBrush x:Key="Theme.MenuBarBackground" Color="#00000000" />
+    <SolidColorBrush x:Key="Theme.MenuBackground" Color="#FF241A4D" />
+    <SolidColorBrush x:Key="Theme.MenuBorder" Color="#FF5B4B8A" />
+    <SolidColorBrush x:Key="Theme.ToolBarBackground" Color="#1AFFFFFF" />
+    <LinearGradientBrush x:Key="Theme.StatusBarBackground" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0" Color="#FF7C3AED" />
+        <GradientStop Offset="1" Color="#FFDB2777" />
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Theme.StatusBarForeground" Color="#FFFFFFFF" />
+
+    <!-- Tabs -->
+    <SolidColorBrush x:Key="Theme.TabStripBackground" Color="#00000000" />
+    <SolidColorBrush x:Key="Theme.TabBackground" Color="#1AFFFFFF" />
+    <SolidColorBrush x:Key="Theme.TabHoverBackground" Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="Theme.TabSelectedBackground" Color="#8C0E0A26" />
+
+    <!-- Splitters and scroll bars -->
+    <SolidColorBrush x:Key="Theme.SplitterBackground" Color="#26FFFFFF" />
+    <SolidColorBrush x:Key="Theme.ScrollBarBackground" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="Theme.ScrollBarThumb" Color="#4DFFFFFF" />
+    <SolidColorBrush x:Key="Theme.ScrollBarThumbHover" Color="#80FFFFFF" />
+
+    <!-- Result grids -->
+    <SolidColorBrush x:Key="Theme.GridHeaderBackground" Color="#66000000" />
+    <SolidColorBrush x:Key="Theme.GridLines" Color="#26FFFFFF" />
+    <SolidColorBrush x:Key="Theme.GridAlternateRowBackground" Color="#0DFFFFFF" />
+
+    <!-- Tooltips -->
+    <SolidColorBrush x:Key="Theme.ToolTipBackground" Color="#FF241A4D" />
+    <SolidColorBrush x:Key="Theme.ToolTipForeground" Color="#FFF3F0FF" />
+    <SolidColorBrush x:Key="Theme.ToolTipBorder" Color="#FFC084FC" />
+
+    <!-- SQL editor -->
+    <SolidColorBrush x:Key="Theme.Editor.Background" Color="#990E0A26" />
+    <SolidColorBrush x:Key="Theme.Editor.Foreground" Color="#FFF3F0FF" />
+    <SolidColorBrush x:Key="Theme.Editor.LineNumbers" Color="#FF8E86B8" />
+    <SolidColorBrush x:Key="Theme.Editor.Selection" Color="#807C3AED" />
+
+    <!-- SQL syntax highlighting -->
+    <SolidColorBrush x:Key="Theme.Syntax.Comment" Color="#FF7FB79A" />
+    <SolidColorBrush x:Key="Theme.Syntax.String" Color="#FFFDBA74" />
+    <SolidColorBrush x:Key="Theme.Syntax.Keyword" Color="#FFF0ABFC" />
+    <SolidColorBrush x:Key="Theme.Syntax.DataType" Color="#FF67E8F9" />
+    <SolidColorBrush x:Key="Theme.Syntax.Function" Color="#FFFDE68A" />
+    <SolidColorBrush x:Key="Theme.Syntax.Variable" Color="#FFA5B4FC" />
+    <SolidColorBrush x:Key="Theme.Syntax.Number" Color="#FFFCA5A5" />
+</ResourceDictionary>

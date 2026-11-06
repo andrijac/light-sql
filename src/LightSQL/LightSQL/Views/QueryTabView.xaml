@@ -28,8 +28,7 @@
         <GridSplitter Grid.Row="1"
                       Height="5"
                       HorizontalAlignment="Stretch"
-                      VerticalAlignment="Stretch"
-                      Background="#FFE0E0E0" />
+                      VerticalAlignment="Stretch" />
 
         <TabControl Grid.Row="2"
                     SelectedIndex="{Binding Results.SelectedTabIndex}">

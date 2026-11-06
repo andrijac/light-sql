@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using LightSQL.Models;
 
 namespace LightSQL.Services
@@ -12,7 +13,10 @@ namespace LightSQL.Services
     {
         private static readonly JsonSerializerOptions serializerOptions = new()
         {
-            WriteIndented = true
+            WriteIndented = true,
+
+            // Enums (e.g. the theme) are written by name, so the file stays readable.
+            Converters = { new JsonStringEnumConverter() }
         };
 
         private readonly string filePath;

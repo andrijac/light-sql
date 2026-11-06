@@ -26,6 +26,15 @@ namespace LightSQL
 
             serviceProvider = services.BuildServiceProvider();
 
+            // Apply the saved theme before any window is created, and keep the
+            // Windows-drawn title bar of every window (opened now or later) in step.
+            IThemeService themeService = serviceProvider.GetRequiredService<IThemeService>();
+            themeService.ApplyTheme(serviceProvider.GetRequiredService<IOptionsService>().Current.Theme);
+            EventManager.RegisterClassHandler(
+                typeof(Window),
+                FrameworkElement.LoadedEvent,
+                new RoutedEventHandler((sender, _) => WindowTitleBar.Apply((Window)sender, themeService.IsDark)));
+
             MainWindow mainWindow = serviceProvider.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
             mainWindow.Show();
@@ -62,6 +71,8 @@ namespace LightSQL
             services.AddSingleton<ISqlConnectionService, SqlConnectionService>();
             services.AddSingleton<ISqlStatementAnalyzer, SqlStatementAnalyzer>();
             services.AddSingleton<IDialogService, DialogService>();
+            services.AddSingleton<ISystemThemeProvider, WindowsSystemThemeProvider>();
+            services.AddSingleton<IThemeService, ThemeService>();
 
             // View models. Query tabs (and their ResultsViewModel) are created by
             // MainViewModel, one per open query, so they are not registered here.

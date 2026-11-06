@@ -1,0 +1,88 @@
+<!--
+    Dark palette: dark surfaces and light text (Visual Studio style).
+    Defines the same keys as every other palette (see Light.xaml).
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <sys:String x:Key="Theme.Name">Dark</sys:String>
+
+    <CornerRadius x:Key="Theme.CornerRadius">2</CornerRadius>
+
+    <!-- Window and text -->
+    <SolidColorBrush x:Key="Theme.WindowBackground" Color="#FF1E1E1E" />
+    <SolidColorBrush x:Key="Theme.Foreground" Color="#FFE0E0E0" />
+    <SolidColorBrush x:Key="Theme.SecondaryForeground" Color="#FF9D9D9D" />
+    <SolidColorBrush x:Key="Theme.DisabledForeground" Color="#FF6A6A6A" />
+    <SolidColorBrush x:Key="Theme.ErrorForeground" Color="#FFF48771" />
+    <SolidColorBrush x:Key="Theme.SuccessForeground" Color="#FF89D185" />
+
+    <!-- Surfaces and inputs -->
+    <SolidColorBrush x:Key="Theme.PanelBackground" Color="#FF252526" />
+    <SolidColorBrush x:Key="Theme.ControlBackground" Color="#FF1E1E1E" />
+    <SolidColorBrush x:Key="Theme.ControlBorder" Color="#FF3F3F46" />
+    <SolidColorBrush x:Key="Theme.ControlHoverBorder" Color="#FF6A6A75" />
+    <SolidColorBrush x:Key="Theme.FocusBorder" Color="#FF3794FF" />
+
+    <!-- Accent -->
+    <SolidColorBrush x:Key="Theme.Accent" Color="#FF3794FF" />
+    <SolidColorBrush x:Key="Theme.AccentForeground" Color="#FFFFFFFF" />
+
+    <!-- Buttons -->
+    <SolidColorBrush x:Key="Theme.ButtonBackground" Color="#FF333337" />
+    <SolidColorBrush x:Key="Theme.ButtonBorder" Color="#FF3F3F46" />
+    <SolidColorBrush x:Key="Theme.ButtonHoverBackground" Color="#FF3E3E42" />
+    <SolidColorBrush x:Key="Theme.ButtonPressedBackground" Color="#FF007ACC" />
+
+    <!-- Hover and selection -->
+    <SolidColorBrush x:Key="Theme.HoverBackground" Color="#FF2A2D2E" />
+    <SolidColorBrush x:Key="Theme.SelectionBackground" Color="#FF094771" />
+    <SolidColorBrush x:Key="Theme.SelectionForeground" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Theme.InactiveSelectionBackground" Color="#FF37373D" />
+
+    <!-- Menus, toolbar, status bar -->
+    <SolidColorBrush x:Key="Theme.MenuBarBackground" Color="#FF2D2D30" />
+    <SolidColorBrush x:Key="Theme.MenuBackground" Color="#FF252526" />
+    <SolidColorBrush x:Key="Theme.MenuBorder" Color="#FF454545" />
+    <SolidColorBrush x:Key="Theme.ToolBarBackground" Color="#FF2D2D30" />
+    <SolidColorBrush x:Key="Theme.StatusBarBackground" Color="#FF007ACC" />
+    <SolidColorBrush x:Key="Theme.StatusBarForeground" Color="#FFFFFFFF" />
+
+    <!-- Tabs -->
+    <SolidColorBrush x:Key="Theme.TabStripBackground" Color="#FF252526" />
+    <SolidColorBrush x:Key="Theme.TabBackground" Color="#FF2D2D2D" />
+    <SolidColorBrush x:Key="Theme.TabHoverBackground" Color="#FF323233" />
+    <SolidColorBrush x:Key="Theme.TabSelectedBackground" Color="#FF1E1E1E" />
+
+    <!-- Splitters and scroll bars -->
+    <SolidColorBrush x:Key="Theme.SplitterBackground" Color="#FF2D2D30" />
+    <SolidColorBrush x:Key="Theme.ScrollBarBackground" Color="#FF1E1E1E" />
+    <SolidColorBrush x:Key="Theme.ScrollBarThumb" Color="#FF424242" />
+    <SolidColorBrush x:Key="Theme.ScrollBarThumbHover" Color="#FF5A5A5A" />
+
+    <!-- Result grids -->
+    <SolidColorBrush x:Key="Theme.GridHeaderBackground" Color="#FF2D2D30" />
+    <SolidColorBrush x:Key="Theme.GridLines" Color="#FF333337" />
+    <SolidColorBrush x:Key="Theme.GridAlternateRowBackground" Color="#FF232325" />
+
+    <!-- Tooltips -->
+    <SolidColorBrush x:Key="Theme.ToolTipBackground" Color="#FF252526" />
+    <SolidColorBrush x:Key="Theme.ToolTipForeground" Color="#FFE0E0E0" />
+    <SolidColorBrush x:Key="Theme.ToolTipBorder" Color="#FF454545" />
+
+    <!-- SQL editor -->
+    <SolidColorBrush x:Key="Theme.Editor.Background" Color="#FF1E1E1E" />
+    <SolidColorBrush x:Key="Theme.Editor.Foreground" Color="#FFD4D4D4" />
+    <SolidColorBrush x:Key="Theme.Editor.LineNumbers" Color="#FF858585" />
+    <SolidColorBrush x:Key="Theme.Editor.Selection" Color="#FF264F78" />
+
+    <!-- SQL syntax highlighting -->
+    <SolidColorBrush x:Key="Theme.Syntax.Comment" Color="#FF6A9955" />
+    <SolidColorBrush x:Key="Theme.Syntax.String" Color="#FFCE9178" />
+    <SolidColorBrush x:Key="Theme.Syntax.Keyword" Color="#FF569CD6" />
+    <SolidColorBrush x:Key="Theme.Syntax.DataType" Color="#FF4EC9B0" />
+    <SolidColorBrush x:Key="Theme.Syntax.Function" Color="#FFDCDCAA" />
+    <SolidColorBrush x:Key="Theme.Syntax.Variable" Color="#FF9CDCFE" />
+    <SolidColorBrush x:Key="Theme.Syntax.Number" Color="#FFB5CEA8" />
+</ResourceDictionary>

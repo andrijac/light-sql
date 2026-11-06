@@ -20,5 +20,11 @@ namespace LightSQL.Models
         /// Editor font size in points. Defaults to 13.
         /// </summary>
         public double EditorFontSize { get; set; } = 13d;
+
+        /// <summary>
+        /// The colour theme. Defaults to <see cref="AppTheme.System"/>, which follows
+        /// the Windows light/dark app mode.
+        /// </summary>
+        public AppTheme Theme { get; set; } = AppTheme.System;
     }
 }

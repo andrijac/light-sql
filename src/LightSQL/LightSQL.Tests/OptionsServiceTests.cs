@@ -74,5 +74,37 @@ namespace LightSQL.Tests
             Assert.False(service.Current.WarnOnUpdateDeleteWithoutWhere);
             Assert.Equal(15d, service.Current.EditorFontSize);
         }
+
+        [Fact]
+        public void NewService_ThemeDefaultsToAuto()
+        {
+            OptionsService service = new(filePath);
+
+            Assert.Equal(AppTheme.System, service.Current.Theme);
+        }
+
+        [Fact]
+        public void Save_Theme_RoundTripsAndIsStoredByName()
+        {
+            OptionsService service = new(filePath);
+
+            service.Save(new AppOptions { Theme = AppTheme.Gradient });
+
+            OptionsService reloaded = new(filePath);
+
+            Assert.Equal(AppTheme.Gradient, reloaded.Current.Theme);
+            Assert.Contains("\"Gradient\"", File.ReadAllText(filePath));
+        }
+
+        [Fact]
+        public void Load_FileWithoutTheme_UsesAuto()
+        {
+            // Options files written before themes existed have no "Theme" value.
+            File.WriteAllText(filePath, "{ \"ShowLineNumbers\": false }");
+
+            OptionsService service = new(filePath);
+
+            Assert.Equal(AppTheme.System, service.Current.Theme);
+        }
     }
 }

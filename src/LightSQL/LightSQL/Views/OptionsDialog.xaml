@@ -1,4 +1,5 @@
 <Window x:Class="LightSQL.Views.OptionsDialog"
+        Style="{DynamicResource Theme.WindowStyle}"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStartupLocation="CenterOwner"
@@ -10,7 +11,21 @@
 
     <StackPanel Margin="16">
 
-        <GroupBox Header="Safety">
+        <GroupBox Header="Appearance">
+            <StackPanel Orientation="Horizontal" Margin="4,8">
+                <TextBlock Text="Theme"
+                           VerticalAlignment="Center"
+                           Width="70" />
+                <!-- Selecting a theme previews it at once; Cancel restores the old one. -->
+                <ComboBox Width="240"
+                          ItemsSource="{Binding Themes}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Theme"
+                          SelectedValue="{Binding Theme}" />
+            </StackPanel>
+        </GroupBox>
+
+        <GroupBox Header="Safety" Margin="0,8,0,0">
             <CheckBox Content="Warn before executing UPDATE or DELETE without a WHERE clause"
                       IsChecked="{Binding WarnOnUpdateDeleteWithoutWhere}"
                       Margin="4,8" />

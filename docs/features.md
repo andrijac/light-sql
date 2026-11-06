@@ -185,6 +185,9 @@ Creating databases is also available via **Database → New Database…**.
 
 ## Options (Tools → Options)
 
+- Theme: Auto (follow Windows), Light, Dark, Classic (Windows Forms gray) or
+  Gradient. Choosing one previews it immediately; Cancel restores the previous
+  theme. See [themes.md](themes.md).
 - Warn before executing UPDATE/DELETE without a WHERE clause (on by default).
 - Show line numbers.
 - Editor font size.

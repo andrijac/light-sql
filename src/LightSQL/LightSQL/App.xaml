@@ -5,6 +5,11 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Colour palette of the active theme. ThemeService replaces this
+                     dictionary at startup and whenever the theme changes. -->
+                <ResourceDictionary Source="Themes/Palettes/Light.xaml" />
+                <!-- Themed styles for all controls (colours via DynamicResource). -->
+                <ResourceDictionary Source="Themes/Controls.xaml" />
                 <!-- Vector icons for the Object Explorer tree. -->
                 <ResourceDictionary Source="Resources/ObjectExplorerIcons.xaml" />
             </ResourceDictionary.MergedDictionaries>

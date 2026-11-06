@@ -1,4 +1,5 @@
 ﻿<Window x:Class="LightSQL.MainWindow"
+        Style="{DynamicResource Theme.WindowStyle}"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:LightSQL.ViewModels"
@@ -93,7 +94,7 @@
                 <Separator />
                 <Button Content="Execute (F5)"
                         Command="{Binding ExecuteQueryCommand}"
-                        Foreground="DarkGreen"
+                        Foreground="{DynamicResource Theme.SuccessForeground}"
                         FontWeight="Bold"
                         ToolTip="Execute the query or selection" />
                 <Button Content="Cancel"
@@ -173,11 +174,11 @@
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding ObjectType}" Value="Placeholder">
-                                                <Setter Property="Foreground" Value="Gray" />
+                                                <Setter Property="Foreground" Value="{DynamicResource Theme.SecondaryForeground}" />
                                                 <Setter Property="FontStyle" Value="Italic" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding ObjectType}" Value="Error">
-                                                <Setter Property="Foreground" Value="#FFC42B1C" />
+                                                <Setter Property="Foreground" Value="{DynamicResource Theme.ErrorForeground}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -187,7 +188,8 @@
                     </HierarchicalDataTemplate>
                 </TreeView.Resources>
                 <TreeView.ItemContainerStyle>
-                    <Style TargetType="TreeViewItem">
+                    <!-- BasedOn keeps the themed look; only the bindings and menu are added. -->
+                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                         <Setter Property="Tag" Value="{Binding DataContext.ObjectExplorer, RelativeSource={RelativeSource AncestorType=TreeView}}" />
                         <Setter Property="ContextMenu">
@@ -220,8 +222,7 @@
             <GridSplitter Grid.Column="1"
                           Width="5"
                           HorizontalAlignment="Stretch"
-                          VerticalAlignment="Stretch"
-                          Background="#FFE0E0E0" />
+                          VerticalAlignment="Stretch" />
 
             <!-- Query tabs: a header strip above the selected tab's editor + results -->
             <DockPanel Grid.Column="2">
@@ -235,7 +236,7 @@
                             MouseUp="QueryTabStrip_MouseUp">
                     <TabControl.Template>
                         <ControlTemplate TargetType="TabControl">
-                            <Border BorderBrush="#FFACACAC" BorderThickness="0,0,0,1" Background="#FFF0F0F0">
+                            <Border BorderBrush="{DynamicResource Theme.ControlBorder}" BorderThickness="0,0,0,1" Background="{DynamicResource Theme.TabStripBackground}">
                                 <TabPanel IsItemsHost="True" Margin="2,2,2,-1" />
                             </Border>
                         </ControlTemplate>
@@ -248,7 +249,7 @@
                                 <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
                                 <TextBlock Text=" (executing)"
                                            FontStyle="Italic"
-                                           Foreground="Gray"
+                                           Foreground="{DynamicResource Theme.SecondaryForeground}"
                                            VerticalAlignment="Center"
                                            Visibility="{Binding IsExecuting, Converter={StaticResource BooleanToVisibility}}" />
                                 <Button Content="✕"
@@ -268,7 +269,8 @@
 
                     <!-- Right-click menu on a tab header. -->
                     <TabControl.ItemContainerStyle>
-                        <Style TargetType="TabItem">
+                        <!-- BasedOn keeps the themed look; only the menu is added. -->
+                        <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
                             <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}" />
                             <Setter Property="ContextMenu">
                                 <Setter.Value>
@@ -315,7 +317,7 @@
                     <TextBlock Text="No query is open. Press Ctrl+N for a new query or Ctrl+O to open a file."
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               Foreground="Gray"
+                               Foreground="{DynamicResource Theme.SecondaryForeground}"
                                Visibility="{Binding HasTabs, Converter={StaticResource InverseBooleanToVisibility}}" />
                 </Grid>
             </DockPanel>

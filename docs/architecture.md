@@ -19,7 +19,8 @@ src/LightSQL/
 │  ├─ Behaviors/                Attached behaviours (TreeViewRightClickSelection)
 │  ├─ Converters/               WPF value converters
 │  ├─ Resources/                Shared XAML resources (ObjectExplorerIcons.xaml)
-│  ├─ Editor/                   SqlSyntax.xshd (embedded T-SQL highlighting)
+│  ├─ Themes/                   Controls.xaml (themed control styles) + Palettes/ (one per theme)
+│  ├─ Editor/                   SqlSyntax.xshd (embedded T-SQL highlighting) + SqlHighlighting (theme colours)
 │  ├─ App.xaml(.cs)             Entry point + DI container
 │  └─ MainWindow.xaml(.cs)      The shell window
 └─ LightSQL.Tests/              xUnit unit tests
@@ -68,7 +69,12 @@ by `MainViewModel` at runtime and are not registered in the container.
     order mark, else strict UTF-8, else the Windows ANSI code page); `WriteText`
     writes with a given encoding so files round-trip unchanged. `DefaultEncoding`
     (UTF-8 with BOM, like SSMS) is used for new files.
-  - `IOptionsService` / `OptionsService` — application options (JSON).
+  - `IOptionsService` / `OptionsService` — application options (JSON; enums such
+    as the theme are stored by name).
+  - `IThemeService` / `ThemeService` — applies a colour theme by swapping the
+    palette dictionary in the application resources; `ISystemThemeProvider` /
+    `WindowsSystemThemeProvider` report the Windows light/dark mode for the Auto
+    theme; `WindowTitleBar` makes title bars dark. See [themes.md](themes.md).
   - `ISqlStatementAnalyzer` / `SqlStatementAnalyzer` — UPDATE/DELETE-WHERE guard.
   - `ICredentialProtector` / `DpapiCredentialProtector` — DPAPI encrypt/decrypt.
   - `IDialogService` / `DialogService` — message boxes, text prompt, the Windows
@@ -105,7 +111,9 @@ by `MainViewModel` at runtime and are not registered in the container.
     (`LoadSelected`) and raises `SavedConnectionLoaded`, which the dialog's
     code-behind uses to fill its `PasswordBox`es (passwords are never bound).
   - `ResultsViewModel`, `TreeNodeViewModel`, `ObjectExplorerViewModel`,
-    `OptionsViewModel` support specific views.
+    `OptionsViewModel` support specific views. `OptionsViewModel` previews a
+    chosen theme at once and `RevertThemePreview` (called when the dialog closes)
+    restores the previous one unless the options were saved.
 - **Views**
   - `MainWindow` — the shell. The query area is a `TabControl` re-templated to show
     only the tab headers (name, *(executing)* marker, ✕ button, context menu), and

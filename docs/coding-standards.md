@@ -8,6 +8,13 @@ These restate the conventions in `CLAUDE.md` that the codebase follows.
 - Keep `docs/` up to date and write unit tests for new functionality.
 - One class per file.
 
+## Theming (WPF)
+
+All UI must be themed — see [themes.md](themes.md#rules-for-new-ui-so-everything-stays-themed):
+no hard-coded colours in views (use `{DynamicResource Theme.*}`), every window sets
+`Style="{DynamicResource Theme.WindowStyle}"`, inline styles of themed controls use
+`BasedOn`, new colours go into every palette. `ThemeConventionTests` enforces this.
+
 ## C# style
 
 - Every block statement (`if`, `for`, `while`, `foreach`, etc.) uses curly braces.
@@ -45,6 +52,10 @@ Access order within a group: `public` → `internal` → `protected internal` �
   thread. `TreeViewRightClickSelectionTests` shows a real `TreeView` in an
   off-screen window and raises the same tunnelling `PreviewMouseDown` a real
   right-click raises.
+- Theming: `ThemeConventionTests` scans the XAML sources (no hard-coded colours,
+  themed windows, `BasedOn`, all keys exist, identical palettes);
+  `ThemedWindowsTests` shows the real windows off-screen under every theme. WPF
+  tests use the shared `StaThread.Run` helper.
 - View models (`MainViewModel` tabs, `QueryTabViewModel` execution,
   `ConnectionDialogViewModel` saved connections) are unit-tested with in-memory
   fakes in the test project: `FakeSqlConnectionService`, `FakeDialogService`,

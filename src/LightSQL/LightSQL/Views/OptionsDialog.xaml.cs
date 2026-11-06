@@ -20,6 +20,17 @@ namespace LightSQL.Views
 
             this.viewModel = viewModel;
             DataContext = viewModel;
+
+            // Closing without saving (Cancel, Esc, the X button) undoes a theme preview.
+            Closed += OnClosed;
+        }
+
+        /// <summary>
+        /// Restores the previous theme if the options were not saved.
+        /// </summary>
+        private void OnClosed(object? sender, EventArgs e)
+        {
+            viewModel.RevertThemePreview();
         }
 
         /// <summary>

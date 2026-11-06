@@ -1,10 +1,10 @@
-using System.IO;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
-using System.Xml;
+using System.Windows.Media;
+using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Highlighting;
-using ICSharpCode.AvalonEdit.Highlighting.Xshd;
+using LightSQL.Editor;
+using LightSQL.Services;
 
 namespace LightSQL.Views
 {
@@ -69,6 +69,17 @@ namespace LightSQL.Views
             new PropertyMetadata(13d, OnEditorFontSizeChanged));
 
         /// <summary>
+        /// Follows the palette's "Theme.Name" resource (set with SetResourceReference),
+        /// so its change callback runs whenever the theme is switched. Used to
+        /// re-apply the syntax colours, which are not dependency properties.
+        /// </summary>
+        private static readonly DependencyProperty ThemeNameProperty = DependencyProperty.Register(
+            "ThemeName",
+            typeof(object),
+            typeof(SqlEditorControl),
+            new PropertyMetadata(null, OnThemeNameChanged));
+
+        /// <summary>
         /// Guards against feedback loops while syncing the editor and the DP.
         /// </summary>
         private bool isUpdatingDocumentText;
@@ -80,7 +91,19 @@ namespace LightSQL.Views
         {
             InitializeComponent();
 
-            LoadSqlHighlighting();
+            // Selection colour follows the theme; selected text keeps its syntax colour.
+            Editor.TextArea.SetResourceReference(TextArea.SelectionBrushProperty, "Theme.Editor.Selection");
+            Editor.TextArea.SelectionForeground = null;
+            Editor.TextArea.SelectionBorder = null;
+
+            // Applies the syntax colours now and again on every theme switch.
+            SetResourceReference(ThemeNameProperty, ThemeService.ThemeNameKey);
+
+            if (Editor.SyntaxHighlighting is null)
+            {
+                // No theme resources found (e.g. outside the app): default colours.
+                ApplyThemeColors();
+            }
 
             Editor.TextChanged += OnEditorTextChanged;
             Editor.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
@@ -236,24 +259,42 @@ namespace LightSQL.Views
         }
 
         /// <summary>
-        /// Loads the embedded T-SQL highlighting definition into the editor.
+        /// Re-applies the syntax colours when the theme changes.
         /// </summary>
-        private void LoadSqlHighlighting()
+        private static void OnThemeNameChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            Assembly assembly = typeof(SqlEditorControl).Assembly;
-            string resourceName = "LightSQL.Editor.SqlSyntax.xshd";
+            SqlEditorControl control = (SqlEditorControl)d;
 
-            using Stream? stream = assembly.GetManifestResourceStream(resourceName);
+            control.ApplyThemeColors();
+        }
 
-            if (stream is null)
+        /// <summary>
+        /// Loads the T-SQL highlighting with the current theme's syntax colours and
+        /// sets the caret colour (neither can use DynamicResource).
+        /// </summary>
+        private void ApplyThemeColors()
+        {
+            Dictionary<string, Color> colors = new();
+
+            foreach (string name in SqlHighlighting.GetColorNames())
             {
-                return;
+                if (TryFindResource(SqlHighlighting.ResourceKeyPrefix + name) is SolidColorBrush brush)
+                {
+                    colors[name] = brush.Color;
+                }
             }
 
-            using XmlReader reader = XmlReader.Create(stream);
-            IHighlightingDefinition definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
+            IHighlightingDefinition? definition = SqlHighlighting.Create(colors);
 
-            Editor.SyntaxHighlighting = definition;
+            if (definition is not null)
+            {
+                Editor.SyntaxHighlighting = definition;
+            }
+
+            if (TryFindResource("Theme.Editor.Foreground") is Brush caretBrush)
+            {
+                Editor.TextArea.Caret.CaretBrush = caretBrush;
+            }
         }
 
         /// <summary>
