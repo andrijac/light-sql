@@ -165,6 +165,33 @@ namespace LightSQL.Tests
         }
 
         /// <summary>
+        /// The scroll bar thumb brush and the thumb style must not share a resource key.
+        /// When they did, the thumb Border's dynamic background lookup resolved to the
+        /// style, and the scroll bar crashed on render with
+        /// "'System.Windows.Style' is not a valid value for property 'Background'".
+        /// </summary>
+        [Fact]
+        public void ScrollBarThumbBackground_ResolvesToBrush_NotStyle()
+        {
+            object thumbBackground = StaThread.Run(() =>
+            {
+                // Merge the dictionaries in the same order as App.xaml: palette first,
+                // themed control styles second. The later dictionary wins on a key
+                // clash, so a style keyed the same as the brush would be returned here.
+                ResourceDictionary resources = new();
+
+                resources.MergedDictionaries.Add((ResourceDictionary)Application.LoadComponent(
+                    new Uri("/LightSQL;component/Themes/Palettes/Light.xaml", UriKind.Relative)));
+                resources.MergedDictionaries.Add((ResourceDictionary)Application.LoadComponent(
+                    new Uri("/LightSQL;component/Themes/Controls.xaml", UriKind.Relative)));
+
+                return resources["Theme.ScrollBarThumb"];
+            });
+
+            Assert.IsAssignableFrom<Brush>(thumbBackground);
+        }
+
+        /// <summary>
         /// Gives a window the theme resources (normally in App.xaml) and returns a
         /// theme service that swaps the palette in them.
         /// </summary>

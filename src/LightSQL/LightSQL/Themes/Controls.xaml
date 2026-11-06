@@ -58,7 +58,7 @@
         </Setter>
     </Style>
 
-    <Style x:Key="Theme.ScrollBarThumb" TargetType="Thumb">
+    <Style x:Key="Theme.ScrollBarThumbStyle" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True" />
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
@@ -98,7 +98,7 @@
                                 <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource Theme.TransparentRepeatButton}" />
                             </Track.IncreaseRepeatButton>
                             <Track.Thumb>
-                                <Thumb Style="{StaticResource Theme.ScrollBarThumb}" />
+                                <Thumb Style="{StaticResource Theme.ScrollBarThumbStyle}" />
                             </Track.Thumb>
                         </Track>
                     </Border>
@@ -123,7 +123,7 @@
                                         <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource Theme.TransparentRepeatButton}" />
                                     </Track.IncreaseRepeatButton>
                                     <Track.Thumb>
-                                        <Thumb Style="{StaticResource Theme.ScrollBarThumb}" />
+                                        <Thumb Style="{StaticResource Theme.ScrollBarThumbStyle}" />
                                     </Track.Thumb>
                                 </Track>
                             </Border>

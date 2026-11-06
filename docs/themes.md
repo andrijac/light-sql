@@ -86,6 +86,13 @@ App.xaml  MergedDictionaries
    `Themes/Palettes/<Name>.xaml` with all keys and `Theme.Name` = `<Name>`, a case
    in `ThemeService.ResolveEffectiveTheme`/`GetPaletteUri` (and `IsDarkTheme` if
    dark), and an entry in `ThemeOption.All`.
+8. **A keyed style must not reuse a palette brush key.** `Controls.xaml` is merged
+   *after* the palette, so a `<Style x:Key="Theme.X">` there shadows a palette
+   brush `Theme.X`; a `{DynamicResource Theme.X}` background then resolves to the
+   **style** and the control crashes on render with *"'System.Windows.Style' is not
+   a valid value for property 'Background'"*. Suffix keyed styles so they cannot
+   clash — e.g. the scroll bar thumb's brush is `Theme.ScrollBarThumb` and its
+   style is `Theme.ScrollBarThumbStyle`.
 
 Rules 1, 2, 3, 5 and 6 are enforced by unit tests (`ThemeConventionTests`), and
 `ThemedWindowsTests` shows the real windows under every theme, so a broken
@@ -102,6 +109,7 @@ template or a missing key fails the build's tests.
 - `ThemedWindowsTests` — the main window and all dialogs shown off-screen under
   all four palettes (switching at runtime, with a menu and dropdown opened);
   checks window, tree, status bar and editor brushes and the editor's keyword
-  colour follow the palette.
+  colour follow the palette. `ScrollBarThumbBackground_ResolvesToBrush_NotStyle`
+  guards against the keyed-style / brush key clash described in rule 8.
 - `SqlHighlightingTests`, `OptionsViewModelTests` (preview / save / cancel),
   `OptionsServiceTests` (theme persisted by name, default Auto).
