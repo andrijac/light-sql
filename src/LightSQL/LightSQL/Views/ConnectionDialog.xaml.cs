@@ -28,6 +28,9 @@ namespace LightSQL.Views
             // boxes are not bound, so they are refreshed here.
             viewModel.SavedConnectionLoaded += OnSavedConnectionLoaded;
 
+            // Resetting the form for a new connection clears the password boxes too.
+            viewModel.FormReset += OnFormReset;
+
             // Pre-fill the password box for a loaded saved connection.
             if (string.IsNullOrEmpty(viewModel.Password) == false)
             {
@@ -42,6 +45,7 @@ namespace LightSQL.Views
         protected override void OnClosed(EventArgs e)
         {
             viewModel.SavedConnectionLoaded -= OnSavedConnectionLoaded;
+            viewModel.FormReset -= OnFormReset;
 
             base.OnClosed(e);
         }
@@ -50,6 +54,14 @@ namespace LightSQL.Views
         /// Copies the loaded connection's password into the password boxes.
         /// </summary>
         private void OnSavedConnectionLoaded(object? sender, EventArgs e)
+        {
+            SyncPasswordBoxes();
+        }
+
+        /// <summary>
+        /// Clears the password boxes when the form is reset for a new connection.
+        /// </summary>
+        private void OnFormReset(object? sender, EventArgs e)
         {
             SyncPasswordBoxes();
         }

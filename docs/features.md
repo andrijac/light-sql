@@ -65,7 +65,9 @@ dialog. Two modes:
 
 Saved connections are listed on the left. **Selecting** one loads its details
 (including a saved password) into the form, so you can press **Connect** straight
-away; **double-click** it to connect in one step. **Delete** removes the selected
+away; **double-click** it to connect in one step. **New** clears the form back to
+its empty defaults (and deselects the list) so you can define a brand-new
+connection instead of editing the selected one. **Delete** removes the selected
 connection. Tick **Save this connection** (and optionally **Save password**) to
 persist it. **Test** validates the details without connecting the app.
 

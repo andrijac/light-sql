@@ -146,6 +146,36 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Clears the form back to its empty, default state so the user can define
+        /// a brand-new connection instead of editing the selected saved one.
+        /// Deselects any saved connection and raises <see cref="FormReset"/> so the
+        /// view can clear its password boxes (the password is not bindable).
+        /// </summary>
+        [RelayCommand]
+        private void New()
+        {
+            // Deselecting first stops the list from reloading the old values.
+            SelectedSavedConnection = null;
+
+            Name = string.Empty;
+            UseRawConnectionString = false;
+            Server = string.Empty;
+            AuthenticationType = AuthenticationType.Windows;
+            UserId = string.Empty;
+            Database = string.Empty;
+            Encrypt = true;
+            TrustServerCertificate = true;
+            RawConnectionString = string.Empty;
+            SaveConnection = false;
+            SavePassword = false;
+            Password = null;
+
+            StatusMessage = "New connection.";
+
+            FormReset?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
         /// Deletes the selected saved connection.
         /// </summary>
         [RelayCommand]
@@ -321,5 +351,11 @@ namespace LightSQL.ViewModels
         /// view can copy <see cref="Password"/> into its password boxes.
         /// </summary>
         public event EventHandler? SavedConnectionLoaded;
+
+        /// <summary>
+        /// Raised after the form has been reset to its empty state, so the view can
+        /// clear its password boxes (the password is not bindable).
+        /// </summary>
+        public event EventHandler? FormReset;
     }
 }

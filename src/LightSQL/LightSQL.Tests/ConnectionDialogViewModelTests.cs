@@ -104,6 +104,67 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public void New_ResetsFormFieldsToDefaults()
+        {
+            ConnectionProfile saved = new()
+            {
+                Name = "Prod",
+                Server = "sql01",
+                AuthenticationType = AuthenticationType.SqlServer,
+                UserId = "app",
+                Database = "Sales",
+                Encrypt = false,
+                TrustServerCertificate = false,
+                SavePassword = true,
+                Password = "secret"
+            };
+
+            ConnectionDialogViewModel viewModel = CreateViewModel(saved);
+            viewModel.SelectedSavedConnection = saved;
+
+            viewModel.NewCommand.Execute(null);
+
+            Assert.Equal(string.Empty, viewModel.Name);
+            Assert.False(viewModel.UseRawConnectionString);
+            Assert.Equal(string.Empty, viewModel.Server);
+            Assert.Equal(AuthenticationType.Windows, viewModel.AuthenticationType);
+            Assert.Equal(string.Empty, viewModel.UserId);
+            Assert.Equal(string.Empty, viewModel.Database);
+            Assert.True(viewModel.Encrypt);
+            Assert.True(viewModel.TrustServerCertificate);
+            Assert.Equal(string.Empty, viewModel.RawConnectionString);
+            Assert.False(viewModel.SaveConnection);
+            Assert.False(viewModel.SavePassword);
+            Assert.Null(viewModel.Password);
+        }
+
+        [Fact]
+        public void New_DeselectsSavedConnection()
+        {
+            ConnectionProfile saved = new() { Name = "Local", Server = "localhost" };
+            ConnectionDialogViewModel viewModel = CreateViewModel(saved);
+            viewModel.SelectedSavedConnection = saved;
+
+            viewModel.NewCommand.Execute(null);
+
+            Assert.Null(viewModel.SelectedSavedConnection);
+        }
+
+        [Fact]
+        public void New_RaisesFormReset()
+        {
+            ConnectionProfile saved = new() { Name = "Local", Server = "localhost" };
+            ConnectionDialogViewModel viewModel = CreateViewModel(saved);
+            viewModel.SelectedSavedConnection = saved;
+            int raised = 0;
+            viewModel.FormReset += (sender, e) => raised++;
+
+            viewModel.NewCommand.Execute(null);
+
+            Assert.Equal(1, raised);
+        }
+
+        [Fact]
         public void DeleteSelected_RemovesConnectionFromListAndStore()
         {
             ConnectionProfile saved = new() { Name = "Local", Server = "localhost" };
