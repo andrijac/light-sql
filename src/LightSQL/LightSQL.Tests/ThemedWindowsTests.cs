@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using ICSharpCode.AvalonEdit;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 using LightSQL.ViewModels;
 using LightSQL.Views;
 using Xunit;
@@ -139,7 +140,7 @@ namespace LightSQL.Tests
                 List<Window> dialogs = new()
                 {
                     new OptionsDialog(new OptionsViewModel(new FakeOptionsService(), new FakeThemeService())),
-                    new ConnectionDialog(new ConnectionDialogViewModel(new FakeSqlConnectionService(), new FakeConnectionStore())),
+                    new ConnectionDialog(new ConnectionDialogViewModel(new FakeSqlConnectionService(), new FakeConnectionStore(), new DatabaseProviderRegistry())),
                     new InputDialog("Title", "Prompt", "value", null)
                 };
 

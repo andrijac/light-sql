@@ -67,6 +67,13 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public void WhereAsBacktickColumnName_DoesNotCount()
+        {
+            // MySQL backtick-quoted `where` is an identifier, not a clause, so the UPDATE is unguarded.
+            Assert.True(analyzer.HasUnguardedUpdateOrDelete("UPDATE t SET `where` = 1"));
+        }
+
+        [Fact]
         public void WhereOnlyInSubquery_IsStillFlagged()
         {
             string sql = "UPDATE t SET x = (SELECT TOP 1 y FROM z WHERE z.Id = 1)";
@@ -124,6 +131,9 @@ namespace LightSQL.Tests
         [InlineData("SELECT LastUpdated, IsDeleted FROM Orders")]
         [InlineData("DECLARE @insert int = 1; SELECT @insert")]
         [InlineData("USE Sales; SELECT * FROM Orders")]
+        [InlineData("SELECT `insert`, `delete` FROM `audit`")]
+        [InlineData("SHOW TABLES")]
+        [InlineData("EXPLAIN SELECT * FROM Orders")]
         [InlineData("")]
         public void FindWriteOperation_AllowsReadingBatches(string sql)
         {
@@ -147,6 +157,9 @@ namespace LightSQL.Tests
         [InlineData("SELECT 1; GRANT SELECT ON Orders TO public", "GRANT")]
         [InlineData("SELECT * FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1')", "OPENROWSET")]
         [InlineData("SELECT 1; DBCC CHECKDB", "DBCC")]
+        [InlineData("COPY orders TO '/tmp/orders.csv'", "COPY")]
+        [InlineData("CALL refresh_totals()", "CALL")]
+        [InlineData("SELECT 1; LOCK TABLES orders WRITE", "LOCK")]
         public void FindWriteOperation_BlocksStatementsThatChangeThings(string sql, string expected)
         {
             Assert.Equal(expected, analyzer.FindWriteOperation(sql));

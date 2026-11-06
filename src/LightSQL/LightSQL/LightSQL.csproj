@@ -13,12 +13,17 @@
   <ItemGroup>
     <!-- SQL editor: syntax highlighting, line numbers, caret line/column tracking. -->
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
-    <!-- Modern SQL Server connectivity (replacement for System.Data.SqlClient). -->
+    <!-- Microsoft SQL Server connectivity (SqlServerDatabaseProvider). -->
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- PostgreSQL connectivity (PostgreSqlDatabaseProvider). -->
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <!-- MySQL / MariaDB connectivity (MySqlDatabaseProvider); fully-async ADO.NET driver. -->
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <!-- Lightweight MVVM: ObservableObject, [ObservableProperty], [RelayCommand]. -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- Dependency injection for wiring services and view models at startup. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <!-- MCP server hosted in Kestrel (official C# SDK) for AI clients. -->
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.3.1" />
     <!-- Note: Windows DPAPI (System.Security.Cryptography.ProtectedData) is provided
          by the net10.0-windows framework and does not need a package reference. -->

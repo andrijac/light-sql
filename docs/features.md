@@ -63,7 +63,8 @@ database**, **own Results/Messages**, and its own execution and cancellation.
 right-click in the Object Explorer) starts an MCP server for the current
 connection on the first free port from 9000 up, in a new tab. AI clients such as
 Claude Code or Codex connect to it and can list databases, tables and columns and
-run T-SQL from a chat. Servers are **read-only by default**; the tab's **Allow
+run SQL (in the connected engine's dialect) from a chat. Servers are **read-only by
+default**; the tab's **Allow
 read-write** check box (with confirmation) lets the AI change data. The tab shows
 the connection, default database, access mode, port,
 endpoint, copy-ready client setup and a log of every tool call; closing the tab
@@ -72,12 +73,16 @@ stops the server. Details: [mcp-server.md](mcp-server.md).
 ## Connecting
 
 **Database → Connect** (or the toolbar **Connect** button) opens the connection
-dialog. Two modes:
+dialog. First pick the **Database type** — Microsoft SQL Server, PostgreSQL or
+MySQL / MariaDB (see [database-providers.md](database-providers.md)) — then choose a
+mode:
 
-- **Form:** server name, authentication (Windows or SQL Server), login/password,
-  optional database, Encrypt / Trust server certificate.
-- **Connection string:** paste a full .NET connection string. An optional password
-  box injects a password if the string does not contain one.
+- **Form:** server / host name, optional port (blank uses the engine default),
+  authentication (Windows or SQL Server, shown for SQL Server only; PostgreSQL and
+  MySQL always use login/password), optional database, Encrypt / Trust server
+  certificate.
+- **Connection string:** paste a full .NET connection string for the selected engine.
+  An optional password box injects a password if the string does not contain one.
 
 Saved connections are listed on the left. **Selecting** one loads its details
 (including a saved password) into the form, so you can press **Connect** straight
@@ -114,8 +119,9 @@ clears their database.
 
 ## Writing and running queries
 
-- The editor provides T-SQL syntax highlighting, line numbers, and standard
-  editing (undo/redo/cut/copy/paste/select-all via the Edit menu).
+- The editor provides SQL syntax highlighting (tuned for T-SQL; most keywords are
+  shared across engines), line numbers, and standard editing
+  (undo/redo/cut/copy/paste/select-all via the Edit menu).
 - **F5** (or **Query → Execute**, or the toolbar) runs the **selected text** if any,
   otherwise the whole editor.
 - Results appear in the **Results** tab (one grid per result set). Informational
@@ -191,8 +197,8 @@ Right-clicking a node first selects it (the highlight moves to it, as in SSMS), 
 it is always clear which node the context menu acts on. Right-click a node for:
 
 - **New Query** — open a new, empty query tab on the node's database.
-- **Select Top 1000** — open a new tab with a `SELECT TOP 1000` for a table/view
-  and run it.
+- **Select Top 1000** — open a new tab with a "top 1000 rows" query for a table/view
+  and run it (`SELECT TOP 1000` on SQL Server, `… LIMIT 1000` on PostgreSQL / MySQL).
 - **New Database…** — prompt for a name and run `CREATE DATABASE`.
 - **Drop…** — drop a table, view or database (with confirmation).
 - **Start MCP Server** — start an MCP server whose default database is the node's

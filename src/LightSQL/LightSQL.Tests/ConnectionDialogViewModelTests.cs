@@ -1,4 +1,5 @@
 using LightSQL.Models;
+using LightSQL.Services.Database;
 using LightSQL.ViewModels;
 using Xunit;
 
@@ -169,7 +170,7 @@ namespace LightSQL.Tests
         {
             ConnectionProfile saved = new() { Name = "Local", Server = "localhost" };
             FakeConnectionStore store = new(saved);
-            ConnectionDialogViewModel viewModel = new(new FakeSqlConnectionService(), store);
+            ConnectionDialogViewModel viewModel = new(new FakeSqlConnectionService(), store, new DatabaseProviderRegistry());
             viewModel.SelectedSavedConnection = saved;
 
             viewModel.DeleteSelectedCommand.Execute(null);
@@ -185,7 +186,61 @@ namespace LightSQL.Tests
         /// <returns>The view model.</returns>
         private static ConnectionDialogViewModel CreateViewModel(params ConnectionProfile[] profiles)
         {
-            return new ConnectionDialogViewModel(new FakeSqlConnectionService(), new FakeConnectionStore(profiles));
+            return new ConnectionDialogViewModel(new FakeSqlConnectionService(), new FakeConnectionStore(profiles), new DatabaseProviderRegistry());
+        }
+
+        [Fact]
+        public void DefaultEngine_IsSqlServer_WithWindowsAuthShown()
+        {
+            ConnectionDialogViewModel viewModel = CreateViewModel();
+
+            Assert.Equal(DatabaseEngine.SqlServer, viewModel.SelectedEngine.Engine);
+            Assert.True(viewModel.ShowAuthenticationType);
+            Assert.False(viewModel.AreCredentialsEnabled);
+        }
+
+        [Fact]
+        public void SelectingPostgreSql_HidesAuthTypeAndEnablesCredentials()
+        {
+            ConnectionDialogViewModel viewModel = CreateViewModel();
+
+            viewModel.SelectedEngine = new DatabaseProviderRegistry().Get(DatabaseEngine.PostgreSql);
+
+            Assert.False(viewModel.ShowAuthenticationType);
+            Assert.True(viewModel.AreCredentialsEnabled);
+        }
+
+        [Fact]
+        public void BuildProfile_CarriesEngineAndPort()
+        {
+            ConnectionDialogViewModel viewModel = CreateViewModel();
+
+            viewModel.SelectedEngine = new DatabaseProviderRegistry().Get(DatabaseEngine.MySql);
+            viewModel.Server = "localhost";
+            viewModel.Port = "3307";
+            viewModel.UserId = "root";
+            viewModel.Password = "secret";
+
+            bool accepted = viewModel.Accept();
+
+            Assert.True(accepted);
+            Assert.NotNull(viewModel.Result);
+            Assert.Equal(DatabaseEngine.MySql, viewModel.Result!.Engine);
+            Assert.Equal(3307, viewModel.Result.Port);
+        }
+
+        [Fact]
+        public void Accept_PostgreSqlWithoutLogin_FailsValidation()
+        {
+            ConnectionDialogViewModel viewModel = CreateViewModel();
+
+            viewModel.SelectedEngine = new DatabaseProviderRegistry().Get(DatabaseEngine.PostgreSql);
+            viewModel.Server = "localhost";
+
+            bool accepted = viewModel.Accept();
+
+            Assert.False(accepted);
+            Assert.Equal("Enter a login name.", viewModel.StatusMessage);
         }
     }
 }

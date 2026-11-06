@@ -1,22 +1,47 @@
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Text;
 using LightSQL.Models;
-using Microsoft.Data.SqlClient;
+using LightSQL.Services.Database;
 
 namespace LightSQL.Services
 {
     /// <summary>
-    /// Default implementation of <see cref="ISqlConnectionService"/> using
-    /// Microsoft.Data.SqlClient. A fresh pooled connection is opened per operation,
-    /// targeting the requested database, which keeps execution thread-safe (several
-    /// query tabs can execute at once) and the UI responsive.
+    /// Default implementation of <see cref="ISqlConnectionService"/>. It owns the
+    /// connection lifetime (open / close / transactions) over the ADO.NET base types
+    /// (<see cref="DbConnection"/>, <see cref="DbCommand"/>, <see cref="DbDataReader"/>)
+    /// and delegates every engine-specific decision to an <see cref="IDatabaseProvider"/>
+    /// chosen from the connected profile's engine. A fresh pooled connection is opened per
+    /// operation, targeting the requested database, which keeps execution thread-safe
+    /// (several query tabs can execute at once) and the UI responsive.
     /// </summary>
     public sealed class SqlConnectionService : ISqlConnectionService
     {
+        private readonly IDatabaseProviderRegistry providerRegistry;
+
         private ConnectionProfile? activeProfile;
+        private IDatabaseProvider? activeProvider;
         private string? currentDatabase;
         private string? serverName;
+
+        /// <summary>
+        /// Creates the service with the default provider registry (SQL Server, PostgreSQL,
+        /// MySQL). Used by the MCP server factory, which needs its own connection state.
+        /// </summary>
+        public SqlConnectionService()
+            : this(new DatabaseProviderRegistry())
+        {
+        }
+
+        /// <summary>
+        /// Creates the service over a provider registry.
+        /// </summary>
+        /// <param name="providerRegistry">Resolves the provider for a connection's engine.</param>
+        public SqlConnectionService(IDatabaseProviderRegistry providerRegistry)
+        {
+            this.providerRegistry = providerRegistry ?? throw new ArgumentNullException(nameof(providerRegistry));
+        }
 
         /// <inheritdoc />
         public bool IsConnected
@@ -46,6 +71,33 @@ namespace LightSQL.Services
         }
 
         /// <inheritdoc />
+        public DatabaseEngine? Engine
+        {
+            get
+            {
+                return activeProfile?.Engine;
+            }
+        }
+
+        /// <inheritdoc />
+        public ISqlDialect? Dialect
+        {
+            get
+            {
+                return activeProvider?.Dialect;
+            }
+        }
+
+        /// <inheritdoc />
+        public string? AdministrativeDatabase
+        {
+            get
+            {
+                return activeProvider?.AdministrativeDatabase;
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<string> ConnectAsync(ConnectionProfile profile, CancellationToken cancellationToken)
         {
             if (profile is null)
@@ -53,22 +105,20 @@ namespace LightSQL.Services
                 throw new ArgumentNullException(nameof(profile));
             }
 
-            string connectionString = ConnectionStringFactory.Build(profile);
+            IDatabaseProvider provider = providerRegistry.Get(profile.Engine);
+            string connectionString = provider.BuildConnectionString(profile, null);
 
-            await using SqlConnection connection = new(connectionString);
+            await using DbConnection connection = provider.CreateConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
             // Capture the effective current database (the server picks a default when none is set).
-            using (SqlCommand command = new("SELECT DB_NAME()", connection))
-            {
-                object? result = await command.ExecuteScalarAsync(cancellationToken);
-                currentDatabase = result as string;
-            }
+            currentDatabase = await provider.GetCurrentDatabaseAsync(connection, cancellationToken);
 
             activeProfile = profile;
+            activeProvider = provider;
             serverName = connection.DataSource;
 
-            return $"{connection.DataSource} (SQL Server {connection.ServerVersion})";
+            return provider.DescribeServer(connection);
         }
 
         /// <inheritdoc />
@@ -79,18 +129,20 @@ namespace LightSQL.Services
                 throw new ArgumentNullException(nameof(profile));
             }
 
-            string connectionString = ConnectionStringFactory.Build(profile);
+            IDatabaseProvider provider = providerRegistry.Get(profile.Engine);
+            string connectionString = provider.BuildConnectionString(profile, null);
 
-            await using SqlConnection connection = new(connectionString);
+            await using DbConnection connection = provider.CreateConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            return $"{connection.DataSource} (SQL Server {connection.ServerVersion})";
+            return provider.DescribeServer(connection);
         }
 
         /// <inheritdoc />
         public void Disconnect()
         {
             activeProfile = null;
+            activeProvider = null;
             currentDatabase = null;
             serverName = null;
         }
@@ -112,45 +164,29 @@ namespace LightSQL.Services
         {
             EnsureConnected();
 
-            const string query = "SELECT name FROM sys.databases WHERE state = 0 ORDER BY name";
-            List<string> databases = new();
+            await using DbConnection connection = await OpenAsync(activeProvider!.AdministrativeDatabase, cancellationToken);
 
-            string connectionString = ConnectionStringFactory.Build(activeProfile!, "master");
-
-            await using SqlConnection connection = new(connectionString);
-            await connection.OpenAsync(cancellationToken);
-
-            await using SqlCommand command = new(query, connection);
-            await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                databases.Add(reader.GetString(0));
-            }
-
-            return databases;
+            return await activeProvider!.GetDatabasesAsync(connection, cancellationToken);
         }
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<SchemaObject>> GetTablesAsync(string database, CancellationToken cancellationToken)
         {
-            const string query = @"SELECT s.name AS SchemaName, t.name AS ObjectName
-                FROM sys.tables t
-                INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-                ORDER BY s.name, t.name";
+            EnsureConnected();
 
-            return await GetSchemaObjectsAsync(database, query, cancellationToken);
+            await using DbConnection connection = await OpenAsync(database, cancellationToken);
+
+            return await activeProvider!.GetTablesAsync(connection, database, cancellationToken);
         }
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<SchemaObject>> GetViewsAsync(string database, CancellationToken cancellationToken)
         {
-            const string query = @"SELECT s.name AS SchemaName, v.name AS ObjectName
-                FROM sys.views v
-                INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
-                ORDER BY s.name, v.name";
+            EnsureConnected();
 
-            return await GetSchemaObjectsAsync(database, query, cancellationToken);
+            await using DbConnection connection = await OpenAsync(database, cancellationToken);
+
+            return await activeProvider!.GetViewsAsync(connection, database, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -158,44 +194,9 @@ namespace LightSQL.Services
         {
             EnsureConnected();
 
-            const string query = @"SELECT c.name AS ColumnName, ty.name AS TypeName,
-                    c.max_length AS MaxLength, c.precision AS Precision, c.scale AS Scale, c.is_nullable AS IsNullable
-                FROM sys.columns c
-                INNER JOIN sys.objects o ON c.object_id = o.object_id
-                INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
-                INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
-                WHERE s.name = @schema AND o.name = @object
-                ORDER BY c.column_id";
+            await using DbConnection connection = await OpenAsync(database, cancellationToken);
 
-            List<ColumnInfo> columns = new();
-
-            string connectionString = ConnectionStringFactory.Build(activeProfile!, database);
-
-            await using SqlConnection connection = new(connectionString);
-            await connection.OpenAsync(cancellationToken);
-
-            await using SqlCommand command = new(query, connection);
-            command.Parameters.AddWithValue("@schema", schema);
-            command.Parameters.AddWithValue("@object", objectName);
-
-            await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                string typeName = reader.GetString(1);
-                short maxLength = reader.GetInt16(2);
-                byte precision = reader.GetByte(3);
-                byte scale = reader.GetByte(4);
-
-                columns.Add(new ColumnInfo
-                {
-                    Name = reader.GetString(0),
-                    DataType = FormatDataType(typeName, maxLength, precision, scale),
-                    IsNullable = reader.GetBoolean(5)
-                });
-            }
-
-            return columns;
+            return await activeProvider!.GetColumnsAsync(connection, database, schema, objectName, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -208,16 +209,13 @@ namespace LightSQL.Services
                 throw new ArgumentException("A database name is required.", nameof(databaseName));
             }
 
-            // The database name cannot be parameterized; escape it and bracket-quote it.
-            string escaped = databaseName.Replace("]", "]]");
-            string sql = $"CREATE DATABASE [{escaped}]";
+            string sql = activeProvider!.Dialect.BuildCreateDatabase(databaseName);
 
-            string connectionString = ConnectionStringFactory.Build(activeProfile!, "master");
+            await using DbConnection connection = await OpenAsync(activeProvider!.AdministrativeDatabase, cancellationToken);
 
-            await using SqlConnection connection = new(connectionString);
-            await connection.OpenAsync(cancellationToken);
+            await using DbCommand command = connection.CreateCommand();
+            command.CommandText = sql;
 
-            await using SqlCommand command = new(sql, connection);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -244,6 +242,31 @@ namespace LightSQL.Services
         }
 
         /// <summary>
+        /// Opens a fresh connection for the active profile, targeting a specific database.
+        /// </summary>
+        /// <param name="database">The database to target, or null for the profile's own.</param>
+        /// <param name="cancellationToken">Token to cancel the attempt.</param>
+        /// <returns>The opened connection (the caller disposes it).</returns>
+        private async Task<DbConnection> OpenAsync(string? database, CancellationToken cancellationToken)
+        {
+            string connectionString = activeProvider!.BuildConnectionString(activeProfile!, database);
+            DbConnection connection = activeProvider!.CreateConnection(connectionString);
+
+            try
+            {
+                await connection.OpenAsync(cancellationToken);
+            }
+            catch
+            {
+                await connection.DisposeAsync();
+
+                throw;
+            }
+
+            return connection;
+        }
+
+        /// <summary>
         /// Executes a batch on its own pooled connection and collects its result sets,
         /// messages and timing.
         /// </summary>
@@ -256,6 +279,7 @@ namespace LightSQL.Services
         {
             EnsureConnected();
 
+            IDatabaseProvider provider = activeProvider!;
             QueryExecutionResult result = new();
             StringBuilder messages = new();
             Stopwatch stopwatch = Stopwatch.StartNew();
@@ -265,12 +289,12 @@ namespace LightSQL.Services
 
             try
             {
-                string connectionString = ConnectionStringFactory.Build(activeProfile!, targetDatabase);
+                string connectionString = provider.BuildConnectionString(activeProfile!, targetDatabase);
 
-                await using SqlConnection connection = new(connectionString);
+                await using DbConnection connection = provider.CreateConnection(connectionString);
 
-                // PRINT output and warnings surface through InfoMessage.
-                connection.InfoMessage += (sender, args) => AppendInfoMessages(messages, args);
+                // PRINT output, notices and warnings surface through the provider's message event.
+                provider.AttachMessageHandler(connection, line => messages.AppendLine(line));
 
                 await connection.OpenAsync(cancellationToken);
 
@@ -278,13 +302,17 @@ namespace LightSQL.Services
                 string startDatabase = connection.Database;
 
                 // Read-only mode: everything the batch does is undone afterwards.
-                SqlTransaction? transaction = rollBack == true ? connection.BeginTransaction() : null;
+                DbTransaction? transaction = rollBack == true ? await connection.BeginTransactionAsync(cancellationToken) : null;
 
                 try
                 {
-                    await using (SqlCommand command = new(sql, connection) { CommandTimeout = 0, Transaction = transaction })
+                    await using (DbCommand command = connection.CreateCommand())
                     {
-                        await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+                        command.CommandText = sql;
+                        command.CommandTimeout = 0;
+                        command.Transaction = transaction;
+
+                        await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 
                         do
                         {
@@ -303,13 +331,13 @@ namespace LightSQL.Services
                 }
                 finally
                 {
-                    // SqlConnection.Database follows USE statements. Read it here, while
-                    // the connection is still open, so a switch is reported even when a
-                    // later statement in the batch failed.
+                    // The current database follows USE statements (where the engine supports it).
+                    // Read it here, while the connection is still open, so a switch is reported even
+                    // when a later statement in the batch failed.
                     result.NewDatabaseContext = GetNewDatabaseContext(startDatabase, connection.Database);
 
                     // The reader is closed by now, so the transaction can be rolled back.
-                    RollBackQuietly(transaction);
+                    await RollBackQuietlyAsync(transaction);
                 }
 
                 if (result.ResultTables.Count == 0)
@@ -322,7 +350,7 @@ namespace LightSQL.Services
                 // Propagate cancellation so the caller can report it distinctly.
                 throw;
             }
-            catch (SqlException ex)
+            catch (DbException ex)
             {
                 if (cancellationToken.IsCancellationRequested == true)
                 {
@@ -330,7 +358,7 @@ namespace LightSQL.Services
                 }
 
                 result.IsSuccess = false;
-                AppendSqlErrors(messages, ex);
+                AppendErrors(messages, provider, ex);
             }
             catch (Exception ex)
             {
@@ -346,46 +374,13 @@ namespace LightSQL.Services
         }
 
         /// <summary>
-        /// Runs a schema-object listing query against a specific database.
-        /// </summary>
-        /// <param name="database">The database to inspect.</param>
-        /// <param name="query">The listing query returning SchemaName and ObjectName.</param>
-        /// <param name="cancellationToken">Token to cancel the lookup.</param>
-        /// <returns>The listed objects.</returns>
-        private async Task<IReadOnlyList<SchemaObject>> GetSchemaObjectsAsync(string database, string query, CancellationToken cancellationToken)
-        {
-            EnsureConnected();
-
-            List<SchemaObject> objects = new();
-
-            string connectionString = ConnectionStringFactory.Build(activeProfile!, database);
-
-            await using SqlConnection connection = new(connectionString);
-            await connection.OpenAsync(cancellationToken);
-
-            await using SqlCommand command = new(query, connection);
-            await using SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                objects.Add(new SchemaObject
-                {
-                    Schema = reader.GetString(0),
-                    Name = reader.GetString(1)
-                });
-            }
-
-            return objects;
-        }
-
-        /// <summary>
         /// Reads the current result set of a reader into a <see cref="DataTable"/>,
         /// ensuring unique column names.
         /// </summary>
         /// <param name="reader">The open reader positioned on a result set.</param>
         /// <param name="cancellationToken">Token to cancel reading.</param>
         /// <returns>The populated table.</returns>
-        private static async Task<DataTable> ReadResultSetAsync(SqlDataReader reader, CancellationToken cancellationToken)
+        private static async Task<DataTable> ReadResultSetAsync(DbDataReader reader, CancellationToken cancellationToken)
         {
             DataTable table = new();
             HashSet<string> usedNames = new(StringComparer.OrdinalIgnoreCase);
@@ -398,7 +393,7 @@ namespace LightSQL.Services
                 table.Columns.Add(columnName, columnType);
             }
 
-            while (await reader.ReadAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken) == true)
             {
                 DataRow row = table.NewRow();
 
@@ -436,73 +431,25 @@ namespace LightSQL.Services
         }
 
         /// <summary>
-        /// Formats a SQL type name with its length/precision for display.
-        /// </summary>
-        /// <param name="typeName">The base type name.</param>
-        /// <param name="maxLength">The max_length value from sys.columns.</param>
-        /// <param name="precision">The numeric precision.</param>
-        /// <param name="scale">The numeric scale.</param>
-        /// <returns>A display string such as "nvarchar(50)" or "decimal(18,2)".</returns>
-        private static string FormatDataType(string typeName, short maxLength, byte precision, byte scale)
-        {
-            switch (typeName.ToLowerInvariant())
-            {
-                case "nvarchar":
-                case "nchar":
-                {
-                    // Unicode types store two bytes per character; -1 means MAX.
-                    string length = maxLength == -1 ? "max" : (maxLength / 2).ToString();
-
-                    return $"{typeName}({length})";
-                }
-
-                case "varchar":
-                case "char":
-                case "varbinary":
-                case "binary":
-                {
-                    string length = maxLength == -1 ? "max" : maxLength.ToString();
-
-                    return $"{typeName}({length})";
-                }
-
-                case "decimal":
-                case "numeric":
-                {
-                    return $"{typeName}({precision},{scale})";
-                }
-
-                default:
-                {
-                    return typeName;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Appends PRINT/warning text from an InfoMessage event to the message buffer.
+        /// Appends a database error's text to the message buffer, preferring the provider's
+        /// rich formatting and falling back to the exception message.
         /// </summary>
         /// <param name="messages">The message buffer.</param>
-        /// <param name="args">The info-message event data.</param>
-        private static void AppendInfoMessages(StringBuilder messages, SqlInfoMessageEventArgs args)
+        /// <param name="provider">The active provider.</param>
+        /// <param name="exception">The database exception.</param>
+        private static void AppendErrors(StringBuilder messages, IDatabaseProvider provider, DbException exception)
         {
-            foreach (SqlError error in args.Errors)
-            {
-                messages.AppendLine(error.Message);
-            }
-        }
+            bool any = false;
 
-        /// <summary>
-        /// Appends the errors of a <see cref="SqlException"/> to the message buffer.
-        /// </summary>
-        /// <param name="messages">The message buffer.</param>
-        /// <param name="exception">The SQL exception.</param>
-        private static void AppendSqlErrors(StringBuilder messages, SqlException exception)
-        {
-            foreach (SqlError error in exception.Errors)
+            foreach (string line in provider.GetErrorMessages(exception))
             {
-                messages.AppendLine($"Msg {error.Number}, Level {error.Class}, State {error.State}, Line {error.LineNumber}");
-                messages.AppendLine(error.Message);
+                messages.AppendLine(line);
+                any = true;
+            }
+
+            if (any == false)
+            {
+                messages.AppendLine(exception.Message);
             }
         }
 
@@ -512,7 +459,8 @@ namespace LightSQL.Services
         /// again; that is ignored, as there is nothing left to undo.
         /// </summary>
         /// <param name="transaction">The transaction, or null when none was used.</param>
-        private static void RollBackQuietly(SqlTransaction? transaction)
+        /// <returns>A task that completes when the rollback has been attempted.</returns>
+        private static async Task RollBackQuietlyAsync(DbTransaction? transaction)
         {
             if (transaction is null)
             {
@@ -523,20 +471,20 @@ namespace LightSQL.Services
             {
                 if (transaction.Connection is not null)
                 {
-                    transaction.Rollback();
+                    await transaction.RollbackAsync();
                 }
             }
             catch (InvalidOperationException)
             {
                 // Already completed by the server.
             }
-            catch (SqlException)
+            catch (DbException)
             {
                 // The connection is broken; the server rolls the transaction back itself.
             }
             finally
             {
-                transaction.Dispose();
+                await transaction.DisposeAsync();
             }
         }
 
@@ -545,7 +493,7 @@ namespace LightSQL.Services
         /// </summary>
         private void EnsureConnected()
         {
-            if (activeProfile is null)
+            if (activeProfile is null || activeProvider is null)
             {
                 throw new InvalidOperationException("No active connection. Connect to a server first.");
             }

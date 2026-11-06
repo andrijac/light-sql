@@ -18,15 +18,29 @@ namespace LightSQL.Models
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
+        /// The database engine this connection targets. Selects the provider used to
+        /// connect, read metadata and build SQL. Defaults to
+        /// <see cref="DatabaseEngine.SqlServer"/> so profiles saved before multi-engine
+        /// support (which have no stored value) keep working.
+        /// </summary>
+        public DatabaseEngine Engine { get; set; } = DatabaseEngine.SqlServer;
+
+        /// <summary>
         /// When true, the connection is defined by <see cref="RawConnectionString"/>
         /// rather than by the individual form fields.
         /// </summary>
         public bool UseRawConnectionString { get; set; }
 
         /// <summary>
-        /// Server / instance name (form mode), e.g. "localhost" or ".\SQLEXPRESS".
+        /// Server / host name (form mode), e.g. "localhost", ".\SQLEXPRESS" or an IP.
         /// </summary>
         public string Server { get; set; } = string.Empty;
+
+        /// <summary>
+        /// TCP port (form mode), or null to use the engine's default port. Mainly used
+        /// by PostgreSQL and MySQL; SQL Server usually takes the port in the instance name.
+        /// </summary>
+        public int? Port { get; set; }
 
         /// <summary>
         /// Authentication method (form mode).
@@ -88,8 +102,10 @@ namespace LightSQL.Models
             return new ConnectionProfile
             {
                 Name = Name,
+                Engine = Engine,
                 UseRawConnectionString = UseRawConnectionString,
                 Server = Server,
+                Port = Port,
                 AuthenticationType = AuthenticationType,
                 UserId = UserId,
                 Database = Database,

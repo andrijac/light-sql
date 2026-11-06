@@ -43,7 +43,9 @@ namespace LightSQL.Services
             "BACKUP", "RESTORE", "DBCC", "BULK", "CHECKPOINT", "KILL", "SHUTDOWN", "RECONFIGURE",
             "SETUSER", "WRITETEXT", "UPDATETEXT",
             "OPENROWSET", "OPENQUERY", "OPENDATASOURCE",
-            "SEND", "RECEIVE"
+            "SEND", "RECEIVE",
+            // PostgreSQL / MySQL write or state-changing statements.
+            "COPY", "CALL", "LOCK", "VACUUM", "LOAD", "RENAME"
         };
 
         /// <summary>
@@ -53,7 +55,9 @@ namespace LightSQL.Services
         /// </summary>
         private static readonly HashSet<string> readOnlyBatchStarters = new(StringComparer.OrdinalIgnoreCase)
         {
-            "SELECT", "WITH", "DECLARE", "SET", "PRINT", "IF", "BEGIN", "WHILE", "USE", "RETURN", "RAISERROR", "THROW", "WAITFOR"
+            "SELECT", "WITH", "DECLARE", "SET", "PRINT", "IF", "BEGIN", "WHILE", "USE", "RETURN", "RAISERROR", "THROW", "WAITFOR",
+            // Read-only introspection in PostgreSQL / MySQL.
+            "SHOW", "EXPLAIN", "DESCRIBE", "DESC", "VALUES", "TABLE"
         };
 
         /// <inheritdoc />
@@ -372,6 +376,33 @@ namespace LightSQL.Services
                         i++;
                     }
 
+                    builder.Append(" _id_ ");
+                    continue;
+                }
+
+                // Backtick-quoted identifier ` ... ` (MySQL; doubled `` is an escaped backtick)
+                if (c == '`')
+                {
+                    i++;
+
+                    while (i < length)
+                    {
+                        if (sql[i] == '`' && i + 1 < length && sql[i + 1] == '`')
+                        {
+                            i += 2;
+                            continue;
+                        }
+
+                        if (sql[i] == '`')
+                        {
+                            i++;
+                            break;
+                        }
+
+                        i++;
+                    }
+
+                    // A backtick-quoted identifier is a name; replace so `where` is not a keyword.
                     builder.Append(" _id_ ");
                     continue;
                 }

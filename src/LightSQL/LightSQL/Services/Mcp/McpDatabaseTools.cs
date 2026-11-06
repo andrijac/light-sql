@@ -9,8 +9,8 @@ namespace LightSQL.Services.Mcp
     /// <summary>
     /// The tools an MCP server offers to AI clients (Claude, Codex, ...): list the
     /// databases, list a database's tables and views, describe a table's columns
-    /// and execute T-SQL. Every call is reported through a callback so the server
-    /// tab can show what the AI did.
+    /// and execute SQL against the connected engine (SQL Server, PostgreSQL or MySQL).
+    /// Every call is reported through a callback so the server tab can show what the AI did.
     /// <para>
     /// In read-only mode (the default) execute_query first rejects batches that
     /// could change anything (<see cref="ISqlStatementAnalyzer.FindWriteOperation"/>)
@@ -71,7 +71,7 @@ namespace LightSQL.Services.Mcp
         /// <param name="table">The table or view name, optionally schema-qualified.</param>
         /// <param name="schema">An explicit schema, or null.</param>
         /// <returns>The schema (default "dbo") and the object name.</returns>
-        public static (string Schema, string Name) ParseObjectName(string table, string? schema)
+        public static (string Schema, string Name) ParseObjectName(string table, string? schema, string? defaultSchema = "dbo")
         {
             string trimmed = table.Trim();
             string? parsedSchema = null;
@@ -85,7 +85,9 @@ namespace LightSQL.Services.Mcp
                 name = trimmed.Substring(separator + 1);
             }
 
-            string resolvedSchema = string.IsNullOrWhiteSpace(schema) == false ? schema : parsedSchema ?? "dbo";
+            string resolvedSchema = string.IsNullOrWhiteSpace(schema) == false
+                ? schema
+                : parsedSchema ?? defaultSchema ?? string.Empty;
 
             return (Unbracket(resolvedSchema), Unbracket(name));
         }
@@ -96,7 +98,7 @@ namespace LightSQL.Services.Mcp
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
         /// <returns>The database names as a JSON array.</returns>
         [McpServerTool(Name = "list_databases", Title = "List databases", ReadOnly = true, OpenWorld = false)]
-        [Description("Lists the online databases on the connected SQL Server instance.")]
+        [Description("Lists the databases (schemas, for MySQL) on the connected database server.")]
         public Task<CallToolResult> ListDatabasesAsync(CancellationToken cancellationToken = default)
         {
             return RunAsync("list_databases", string.Empty, null, async () =>
@@ -144,13 +146,15 @@ namespace LightSQL.Services.Mcp
         [Description("Lists the columns (name, SQL type, nullability) of a table or view.")]
         public Task<CallToolResult> DescribeTableAsync(
             [Description("Table or view name, e.g. 'Orders' or 'sales.Orders'.")] string table,
-            [Description("Schema name. Omit to use the schema in 'table', or 'dbo'.")] string? schema = null,
+            [Description("Schema name. Omit to use the schema in 'table', or the engine default (dbo / public; ignored by MySQL).")] string? schema = null,
             [Description("Database that owns the table. Omit to use the server's default database.")] string? database = null,
             CancellationToken cancellationToken = default)
         {
             string target = ResolveDatabase(database);
-            (string Schema, string Name) objectName = ParseObjectName(table, schema);
-            string qualified = $"{objectName.Schema}.{objectName.Name}";
+            (string Schema, string Name) objectName = ParseObjectName(table, schema, sqlService.Dialect?.DefaultSchema);
+            string qualified = string.IsNullOrEmpty(objectName.Schema) == true
+                ? objectName.Name
+                : $"{objectName.Schema}.{objectName.Name}";
 
             return RunAsync("describe_table", qualified, target, async () =>
             {
@@ -175,14 +179,15 @@ namespace LightSQL.Services.Mcp
         /// <param name="maxRows">Rows returned per result set.</param>
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
         /// <returns>The result as JSON; an error result when the batch failed.</returns>
-        [McpServerTool(Name = "execute_query", Title = "Execute T-SQL", ReadOnly = false, Destructive = true, OpenWorld = false)]
-        [Description("Executes a T-SQL batch on Microsoft SQL Server and returns every result set (columns, rows), "
-            + "the messages and the number of rows affected. The server is read-only unless the user enabled read-write "
-            + "in LightSQL: then only queries that read data are accepted (no INSERT/UPDATE/DELETE, DDL, EXEC or SELECT INTO) "
+        [McpServerTool(Name = "execute_query", Title = "Execute SQL", ReadOnly = false, Destructive = true, OpenWorld = false)]
+        [Description("Executes a SQL batch on the connected database server (SQL Server, PostgreSQL or MySQL) and "
+            + "returns every result set (columns, rows), the messages and the number of rows affected. Use the SQL "
+            + "dialect of that engine. The server is read-only unless the user enabled read-write in LightSQL: then "
+            + "only queries that read data are accepted (no INSERT/UPDATE/DELETE, DDL, EXEC/CALL or SELECT INTO) "
             + "and the batch is rolled back. "
-            + "Each call runs on its own connection: temp tables, SET options and USE do not carry over to the next call.")]
+            + "Each call runs on its own connection: temporary tables, session settings and USE do not carry over to the next call.")]
         public Task<CallToolResult> ExecuteQueryAsync(
-            [Description("The T-SQL batch to execute (no GO separators).")] string sql,
+            [Description("The SQL batch to execute, in the connected engine's dialect (no GO separators).")] string sql,
             [Description("Database to run in. Omit to use the server's default database.")] string? database = null,
             [Description("Maximum rows returned per result set (default 200, at most 5000).")] int maxRows = McpResultFormatter.DefaultMaxRows,
             CancellationToken cancellationToken = default)
@@ -316,7 +321,8 @@ namespace LightSQL.Services.Mcp
                 return database.Trim();
             }
 
-            return DefaultDatabase ?? "master";
+            // The connection's default, else the engine's administrative database.
+            return DefaultDatabase ?? sqlService.AdministrativeDatabase ?? string.Empty;
         }
 
         /// <summary>

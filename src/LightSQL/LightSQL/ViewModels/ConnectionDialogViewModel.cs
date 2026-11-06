@@ -3,12 +3,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 
 namespace LightSQL.ViewModels
 {
     /// <summary>
-    /// Backs the connection dialog: a form or raw connection string, the list of
-    /// saved connections, and Test / Save behaviour.
+    /// Backs the connection dialog: the database engine, a form or raw connection string,
+    /// the list of saved connections, and Test / Save behaviour.
     ///
     /// The plaintext password is intentionally not an observable/bindable property;
     /// it is exchanged with the dialog's PasswordBox in code-behind so it is never
@@ -18,15 +19,25 @@ namespace LightSQL.ViewModels
     {
         private readonly ISqlConnectionService sqlService;
         private readonly IConnectionStore connectionStore;
+        private readonly IDatabaseProviderRegistry providerRegistry;
 
         [ObservableProperty]
         private string name = string.Empty;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(SupportsWindowsAuthentication))]
+        [NotifyPropertyChangedFor(nameof(ShowAuthenticationType))]
+        [NotifyPropertyChangedFor(nameof(AreCredentialsEnabled))]
+        private IDatabaseProvider selectedEngine;
 
         [ObservableProperty]
         private bool useRawConnectionString;
 
         [ObservableProperty]
         private string server = string.Empty;
+
+        [ObservableProperty]
+        private string port = string.Empty;
 
         [ObservableProperty]
         private AuthenticationType authenticationType = AuthenticationType.Windows;
@@ -66,10 +77,20 @@ namespace LightSQL.ViewModels
         /// </summary>
         /// <param name="sqlService">Service used to test connections.</param>
         /// <param name="connectionStore">Store of saved connections.</param>
-        public ConnectionDialogViewModel(ISqlConnectionService sqlService, IConnectionStore connectionStore)
+        /// <param name="providerRegistry">The available database engines.</param>
+        public ConnectionDialogViewModel(ISqlConnectionService sqlService, IConnectionStore connectionStore, IDatabaseProviderRegistry providerRegistry)
         {
             this.sqlService = sqlService;
             this.connectionStore = connectionStore;
+            this.providerRegistry = providerRegistry;
+
+            foreach (IDatabaseProvider provider in providerRegistry.Providers)
+            {
+                Engines.Add(provider);
+            }
+
+            // Default to SQL Server (the first provider), matching ConnectionProfile's default.
+            selectedEngine = providerRegistry.Get(DatabaseEngine.SqlServer);
 
             foreach (ConnectionProfile profile in connectionStore.GetAll())
             {
@@ -78,7 +99,12 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// The available authentication types for selection.
+        /// The database engines that can be selected.
+        /// </summary>
+        public ObservableCollection<IDatabaseProvider> Engines { get; } = new();
+
+        /// <summary>
+        /// The available authentication types for selection (SQL Server only).
         /// </summary>
         public IReadOnlyList<AuthenticationType> AuthenticationTypes { get; } = new[]
         {
@@ -92,12 +118,43 @@ namespace LightSQL.ViewModels
         public ObservableCollection<ConnectionProfile> SavedConnections { get; } = new();
 
         /// <summary>
-        /// Whether SQL Server authentication is selected (enables user/password fields).
+        /// Whether the selected engine supports Windows / integrated authentication
+        /// (SQL Server only). Drives whether the authentication-type picker is shown.
         /// </summary>
-        public bool IsSqlServerAuth
+        public bool SupportsWindowsAuthentication
         {
             get
             {
+                return SelectedEngine?.SupportsWindowsAuthentication == true;
+            }
+        }
+
+        /// <summary>
+        /// Whether to show the authentication-type picker (only for engines that support
+        /// Windows authentication, i.e. SQL Server).
+        /// </summary>
+        public bool ShowAuthenticationType
+        {
+            get
+            {
+                return SupportsWindowsAuthentication == true;
+            }
+        }
+
+        /// <summary>
+        /// Whether the login and password fields are usable: always for engines without
+        /// Windows authentication (PostgreSQL / MySQL), and only under SQL Server
+        /// authentication for SQL Server.
+        /// </summary>
+        public bool AreCredentialsEnabled
+        {
+            get
+            {
+                if (SupportsWindowsAuthentication == false)
+                {
+                    return true;
+                }
+
                 return AuthenticationType == AuthenticationType.SqlServer;
             }
         }
@@ -128,8 +185,10 @@ namespace LightSQL.ViewModels
             ConnectionProfile profile = SelectedSavedConnection;
 
             Name = profile.Name;
+            SelectedEngine = providerRegistry.Get(profile.Engine);
             UseRawConnectionString = profile.UseRawConnectionString;
             Server = profile.Server;
+            Port = profile.Port?.ToString() ?? string.Empty;
             AuthenticationType = profile.AuthenticationType;
             UserId = profile.UserId;
             Database = profile.Database;
@@ -158,8 +217,10 @@ namespace LightSQL.ViewModels
             SelectedSavedConnection = null;
 
             Name = string.Empty;
+            SelectedEngine = providerRegistry.Get(DatabaseEngine.SqlServer);
             UseRawConnectionString = false;
             Server = string.Empty;
+            Port = string.Empty;
             AuthenticationType = AuthenticationType.Windows;
             UserId = string.Empty;
             Database = string.Empty;
@@ -252,12 +313,12 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Raises a change for <see cref="IsSqlServerAuth"/> when the auth type changes.
+        /// Raises changes for the credential-related flags when the auth type changes.
         /// </summary>
         /// <param name="value">The new authentication type.</param>
         partial void OnAuthenticationTypeChanged(AuthenticationType value)
         {
-            OnPropertyChanged(nameof(IsSqlServerAuth));
+            OnPropertyChanged(nameof(AreCredentialsEnabled));
         }
 
         /// <summary>
@@ -300,9 +361,16 @@ namespace LightSQL.ViewModels
                     return false;
                 }
 
-                if (IsSqlServerAuth == true && string.IsNullOrWhiteSpace(UserId) == true)
+                if (string.IsNullOrWhiteSpace(Port) == false && int.TryParse(Port, out int _) == false)
                 {
-                    error = "Enter a login name for SQL Server authentication.";
+                    error = "Port must be a number.";
+
+                    return false;
+                }
+
+                if (AreCredentialsEnabled == true && string.IsNullOrWhiteSpace(UserId) == true)
+                {
+                    error = "Enter a login name.";
 
                     return false;
                 }
@@ -330,11 +398,15 @@ namespace LightSQL.ViewModels
                 ? (UseRawConnectionString == true ? "Connection" : Server)
                 : Name;
 
+            int? parsedPort = int.TryParse(Port, out int portValue) == true ? portValue : null;
+
             return new ConnectionProfile
             {
                 Name = effectiveName,
+                Engine = SelectedEngine.Engine,
                 UseRawConnectionString = UseRawConnectionString,
                 Server = Server,
+                Port = parsedPort,
                 AuthenticationType = AuthenticationType,
                 UserId = UserId,
                 Database = Database,

@@ -1,6 +1,7 @@
 using System.IO;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 using Xunit;
 
 namespace LightSQL.Tests
@@ -37,7 +38,7 @@ namespace LightSQL.Tests
         {
             const string password = "MyPlainPassword123";
 
-            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore store = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
 
             ConnectionProfile profile = new()
             {
@@ -55,7 +56,7 @@ namespace LightSQL.Tests
             Assert.DoesNotContain(password, fileContents);
 
             // A new store instance should decrypt the password back into memory.
-            ConnectionStore reloaded = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore reloaded = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
             ConnectionProfile loaded = Assert.Single(reloaded.GetAll());
 
             Assert.Equal("Local", loaded.Name);
@@ -65,7 +66,7 @@ namespace LightSQL.Tests
         [Fact]
         public void Save_WithoutSavingPassword_DoesNotPersistPassword()
         {
-            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore store = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
 
             ConnectionProfile profile = new()
             {
@@ -82,7 +83,7 @@ namespace LightSQL.Tests
             string fileContents = File.ReadAllText(filePath);
             Assert.DoesNotContain("ShouldNotPersist", fileContents);
 
-            ConnectionStore reloaded = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore reloaded = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
             ConnectionProfile loaded = Assert.Single(reloaded.GetAll());
 
             Assert.Null(loaded.Password);
@@ -91,7 +92,7 @@ namespace LightSQL.Tests
         [Fact]
         public void Save_RawConnectionString_StripsEmbeddedPassword()
         {
-            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore store = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
 
             ConnectionProfile profile = new()
             {
@@ -110,7 +111,7 @@ namespace LightSQL.Tests
         [Fact]
         public void Save_RawConnectionStringWithSavedPassword_KeepsEmbeddedPasswordEncrypted()
         {
-            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore store = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
 
             ConnectionProfile profile = new()
             {
@@ -126,17 +127,17 @@ namespace LightSQL.Tests
             Assert.DoesNotContain("EmbeddedSecret", fileContents);
 
             // After a restart the password is restored and re-injected when connecting.
-            ConnectionStore reloaded = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore reloaded = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
             ConnectionProfile loaded = Assert.Single(reloaded.GetAll());
 
             Assert.Equal("EmbeddedSecret", loaded.Password);
-            Assert.Contains("Password=EmbeddedSecret", ConnectionStringFactory.Build(loaded));
+            Assert.Contains("Password=EmbeddedSecret", new SqlServerDatabaseProvider().BuildConnectionString(loaded, null));
         }
 
         [Fact]
         public void Delete_RemovesProfile()
         {
-            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore store = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
             store.Save(new ConnectionProfile { Name = "ToDelete", Server = "localhost" });
 
             store.Delete("ToDelete");
@@ -147,7 +148,7 @@ namespace LightSQL.Tests
         [Fact]
         public void Save_ExistingName_UpdatesInPlace()
         {
-            ConnectionStore store = new(new FakeCredentialProtector(), filePath);
+            ConnectionStore store = new(new FakeCredentialProtector(), new DatabaseProviderRegistry(), filePath);
             store.Save(new ConnectionProfile { Name = "Dup", Server = "server-a" });
             store.Save(new ConnectionProfile { Name = "Dup", Server = "server-b" });
 

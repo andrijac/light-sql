@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 
 namespace LightSQL.ViewModels
 {
@@ -155,7 +156,12 @@ namespace LightSQL.ViewModels
                 return;
             }
 
-            string sql = $"SELECT TOP {SelectTopRowCount} * FROM {BracketQualified(node.SchemaName, node.ObjectName)}";
+            if (sqlService.Dialect is null)
+            {
+                return;
+            }
+
+            string sql = sqlService.Dialect.BuildSelectTop(node.SchemaName, node.ObjectName, SelectTopRowCount);
 
             MainActions.OpenQueryTab(node.DatabaseName, sql);
 
@@ -202,6 +208,10 @@ namespace LightSQL.ViewModels
                 return;
             }
 
+            // The database that server-level drops (a database) must run in; for table/view
+            // drops the node's own database is used.
+            string? administrativeDatabase = sqlService.AdministrativeDatabase;
+
             bool confirmed = dialogService.Confirm(
                 $"Are you sure you want to drop {node.Title}? This cannot be undone.",
                 "Confirm Drop");
@@ -213,9 +223,10 @@ namespace LightSQL.ViewModels
 
             try
             {
-                // Databases are dropped from master; tables/views from their own database.
-                // The database is passed explicitly so no query tab's database changes.
-                string targetDatabase = node.ObjectType == DatabaseObjectType.Database ? "master" : node.DatabaseName;
+                // Databases are dropped from the engine's administrative database;
+                // tables/views from their own database. The database is passed explicitly
+                // so no query tab's database changes.
+                string? targetDatabase = node.ObjectType == DatabaseObjectType.Database ? administrativeDatabase : node.DatabaseName;
 
                 QueryExecutionResult result = await sqlService.ExecuteBatchAsync(dropSql, targetDatabase, CancellationToken.None);
 
@@ -398,27 +409,35 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Builds the DROP statement for a droppable node, or null when not droppable.
+        /// Builds the DROP statement for a droppable node using the active engine's
+        /// dialect, or null when not droppable (or disconnected).
         /// </summary>
         /// <param name="node">The node to drop.</param>
         /// <returns>The DROP statement, or null.</returns>
-        private static string? BuildDropStatement(TreeNodeViewModel node)
+        private string? BuildDropStatement(TreeNodeViewModel node)
         {
+            ISqlDialect? dialect = sqlService.Dialect;
+
+            if (dialect is null)
+            {
+                return null;
+            }
+
             switch (node.ObjectType)
             {
                 case DatabaseObjectType.Table:
                 {
-                    return $"DROP TABLE {BracketQualified(node.SchemaName, node.ObjectName)}";
+                    return dialect.BuildDropTable(node.SchemaName, node.ObjectName);
                 }
 
                 case DatabaseObjectType.View:
                 {
-                    return $"DROP VIEW {BracketQualified(node.SchemaName, node.ObjectName)}";
+                    return dialect.BuildDropView(node.SchemaName, node.ObjectName);
                 }
 
                 case DatabaseObjectType.Database:
                 {
-                    return $"DROP DATABASE {Bracket(node.DatabaseName)}";
+                    return dialect.BuildDropDatabase(node.DatabaseName);
                 }
 
                 default:
@@ -426,27 +445,6 @@ namespace LightSQL.ViewModels
                     return null;
                 }
             }
-        }
-
-        /// <summary>
-        /// Wraps an identifier in brackets, escaping any closing bracket.
-        /// </summary>
-        /// <param name="identifier">The identifier to bracket.</param>
-        /// <returns>The bracket-quoted identifier.</returns>
-        private static string Bracket(string identifier)
-        {
-            return $"[{identifier.Replace("]", "]]")}]";
-        }
-
-        /// <summary>
-        /// Builds a bracket-quoted "schema.name" reference.
-        /// </summary>
-        /// <param name="schema">The schema name.</param>
-        /// <param name="name">The object name.</param>
-        /// <returns>The qualified, bracket-quoted reference.</returns>
-        private static string BracketQualified(string schema, string name)
-        {
-            return $"{Bracket(schema)}.{Bracket(name)}";
         }
     }
 }

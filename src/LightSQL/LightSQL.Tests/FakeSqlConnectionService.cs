@@ -1,6 +1,7 @@
 using System.Data;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 
 namespace LightSQL.Tests
 {
@@ -60,6 +61,15 @@ namespace LightSQL.Tests
 
         /// <inheritdoc />
         public string? CurrentDatabase { get; set; }
+
+        /// <inheritdoc />
+        public DatabaseEngine? Engine { get; set; } = DatabaseEngine.SqlServer;
+
+        /// <inheritdoc />
+        public ISqlDialect? Dialect { get; set; } = new SqlServerDialect();
+
+        /// <inheritdoc />
+        public string? AdministrativeDatabase { get; set; } = "master";
 
         /// <summary>
         /// Builds a successful result with one single-column table of the given row count.

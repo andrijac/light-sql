@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using LightSQL.Models;
+using LightSQL.Services.Database;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -26,6 +27,7 @@ namespace LightSQL.Services.Mcp
     {
         private readonly Func<ISqlConnectionService> sqlServiceFactory;
         private readonly ISqlStatementAnalyzer statementAnalyzer;
+        private readonly IDatabaseProviderRegistry providerRegistry;
 
         /// <summary>
         /// The URL path of the MCP endpoint.
@@ -43,10 +45,12 @@ namespace LightSQL.Services.Mcp
         /// </summary>
         /// <param name="sqlServiceFactory">Creates a new, unconnected SQL service for each server.</param>
         /// <param name="statementAnalyzer">Detects statements that could change data (read-only mode).</param>
-        public McpServerHostFactory(Func<ISqlConnectionService> sqlServiceFactory, ISqlStatementAnalyzer statementAnalyzer)
+        /// <param name="providerRegistry">Resolves the engine provider for the connection's instructions.</param>
+        public McpServerHostFactory(Func<ISqlConnectionService> sqlServiceFactory, ISqlStatementAnalyzer statementAnalyzer, IDatabaseProviderRegistry providerRegistry)
         {
             this.sqlServiceFactory = sqlServiceFactory;
             this.statementAnalyzer = statementAnalyzer;
+            this.providerRegistry = providerRegistry;
         }
 
         /// <inheritdoc />
@@ -59,7 +63,8 @@ namespace LightSQL.Services.Mcp
             await sqlService.ConnectAsync(settings.Profile, cancellationToken).ConfigureAwait(false);
 
             McpDatabaseTools tools = new(sqlService, statementAnalyzer, settings.DefaultDatabase, settings.GetAccessMode, settings.ToolCalled);
-            string instructions = BuildInstructions(sqlService.ServerName, tools.DefaultDatabase);
+            IDatabaseProvider provider = providerRegistry.Get(settings.Profile.Engine);
+            string instructions = BuildInstructions(provider.DisplayName, sqlService.ServerName, tools.DefaultDatabase);
 
             HashSet<int> failedPorts = new();
 
@@ -106,17 +111,18 @@ namespace LightSQL.Services.Mcp
         /// Builds the instructions an AI client receives when it connects, describing
         /// the server and how the tools behave.
         /// </summary>
-        /// <param name="serverName">The SQL Server instance name.</param>
+        /// <param name="engineName">The database engine display name (e.g. "PostgreSQL").</param>
+        /// <param name="serverName">The server / host name.</param>
         /// <param name="defaultDatabase">The default database.</param>
         /// <returns>The instructions text.</returns>
-        public static string BuildInstructions(string? serverName, string? defaultDatabase)
+        public static string BuildInstructions(string engineName, string? serverName, string? defaultDatabase)
         {
-            return $"Gives access to the Microsoft SQL Server instance '{serverName}' through LightSQL. "
-                + $"Queries are T-SQL. The default database is '{defaultDatabase}'; pass 'database' to use another one. "
+            return $"Gives access to the {engineName} server '{serverName}' through LightSQL. "
+                + $"Queries use the {engineName} SQL dialect. The default database is '{defaultDatabase}'; pass 'database' to use another one. "
                 + "Use list_databases, list_tables and describe_table to explore the schema before writing queries. "
                 + "The server is read-only by default: execute_query then rejects statements that change anything and rolls every batch back. "
                 + "If the user switched it to read-write, execute_query can change data, so only run INSERT, UPDATE, DELETE or DDL when the user asked for it. "
-                + "Every call runs on a fresh connection, so temp tables, SET options and USE do not persist between calls.";
+                + "Every call runs on a fresh connection, so temporary tables, session settings and USE do not persist between calls.";
         }
 
         /// <summary>

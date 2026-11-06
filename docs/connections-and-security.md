@@ -11,16 +11,32 @@
 Query files are plain text: don't put passwords or connection strings with
 credentials in them.
 
+## Choosing a database engine
+
+The connection dialog's **Database type** picker selects the engine: **Microsoft SQL
+Server**, **PostgreSQL** or **MySQL / MariaDB** (see
+[database-providers.md](database-providers.md)). The form adapts to it:
+
+- **Authentication** (Windows vs SQL Server) is shown only for SQL Server. PostgreSQL
+  and MySQL always use a username and password.
+- **Port** is optional; blank uses the engine default (1433 / 5432 / 3306). For SQL
+  Server the port is appended to the server as `server,port`.
+- A **raw .NET connection string** is parsed with the selected engine's driver, so
+  pick the engine first.
+
+The engine is saved with each connection; profiles saved before multi-engine support
+load as SQL Server.
+
 ## Credential handling
 
-> Connection details can include SQL Server logins. Treat passwords, connection
-> strings and tokens as sensitive and share them with care.
+> Connection details include database logins. Treat passwords, connection strings
+> and tokens as sensitive and share them with care.
 
 LightSQL is designed so a **plaintext password is never written to disk**:
 
-- **Windows / Integrated authentication is the default.** With it, no password is
-  stored at all.
-- **SQL Server authentication** stores a password only when the user ticks
+- **Windows / Integrated authentication is the default for SQL Server.** With it, no
+  password is stored at all. (PostgreSQL and MySQL always use username/password.)
+- **Username / password authentication** stores a password only when the user ticks
   **Save password**. The value is encrypted with the **Windows Data Protection API
   (DPAPI)**, scoped to the current Windows user (`DataProtectionScope.CurrentUser`),
   plus an application-specific entropy value. Only `connections.json`'s
@@ -28,9 +44,10 @@ LightSQL is designed so a **plaintext password is never written to disk**:
 - A DPAPI-encrypted value can only be decrypted by the **same Windows user on the
   same machine**. Copying `connections.json` to another user or machine makes the
   saved passwords unreadable (the app simply treats them as absent).
-- When a connection is defined by a **raw connection string**, any embedded
-  `Password=`/`PWD=` is **stripped out** before the string is saved; if the user
-  opted to save the password it is moved into the encrypted field instead.
+- When a connection is defined by a **raw connection string**, any embedded password
+  is **stripped out** before the string is saved (using the selected engine's driver
+  to parse it); if the user opted to save the password it is moved into the encrypted
+  field instead.
 - In the UI the password lives only in the `PasswordBox`; it is read in code-behind
   at connect/test time and never placed into a bindable property.
 
@@ -54,7 +71,9 @@ servers you no longer use.
 
 ## Recommendations
 
-- Prefer Windows authentication where possible.
+- Prefer Windows authentication where possible (SQL Server).
 - Leave **Encrypt** on. For local/dev servers with self-signed certificates, keep
-  **Trust server certificate** on; for production, use a trusted certificate.
+  **Trust server certificate** on; for production, use a trusted certificate. The two
+  checkboxes map onto each engine's SSL mode (see the table in
+  [database-providers.md](database-providers.md)).
 - Do not commit `connections.json` to source control.

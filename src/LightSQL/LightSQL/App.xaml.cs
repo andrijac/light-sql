@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 using LightSQL.Services.Mcp;
 using LightSQL.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,9 @@ namespace LightSQL
             // Services (single instances for the application lifetime).
             services.AddSingleton<ICredentialProtector, DpapiCredentialProtector>();
             services.AddSingleton<IOptionsService, OptionsService>();
+            // The provider registry selects the engine-specific provider (SQL Server,
+            // PostgreSQL, MySQL) for a connection; stateless, so a single instance is shared.
+            services.AddSingleton<IDatabaseProviderRegistry, DatabaseProviderRegistry>();
             services.AddSingleton<IConnectionStore, ConnectionStore>();
             services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<ISqlConnectionService, SqlConnectionService>();
@@ -77,8 +81,10 @@ namespace LightSQL
             services.AddSingleton<IClipboardService, ClipboardService>();
 
             // MCP servers: each one gets its own SQL service (its own connection state),
-            // so it is independent of the connection used by the query tabs.
-            services.AddSingleton<Func<ISqlConnectionService>>(() => new SqlConnectionService());
+            // so it is independent of the connection used by the query tabs. The service
+            // shares the registered provider registry.
+            services.AddSingleton<Func<ISqlConnectionService>>(serviceProvider =>
+                () => new SqlConnectionService(serviceProvider.GetRequiredService<IDatabaseProviderRegistry>()));
             services.AddSingleton<IMcpServerHostFactory, McpServerHostFactory>();
 
             // View models. Query tabs (and their ResultsViewModel) are created by

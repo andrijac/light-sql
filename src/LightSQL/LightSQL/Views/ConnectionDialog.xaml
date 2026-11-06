@@ -51,29 +51,42 @@
         <!-- Connection details -->
         <StackPanel Grid.Column="1">
 
+            <TextBlock Text="Database type" />
+            <ComboBox ItemsSource="{Binding Engines}"
+                      SelectedItem="{Binding SelectedEngine}"
+                      DisplayMemberPath="DisplayName"
+                      Margin="0,2,0,8" />
+
             <CheckBox Content="Use a .NET connection string"
                       IsChecked="{Binding UseRawConnectionString}"
                       Margin="0,0,0,8" />
 
             <!-- Form mode -->
             <StackPanel Visibility="{Binding UseRawConnectionString, Converter={StaticResource InverseBoolToVisibility}}">
-                <TextBlock Text="Server name" />
+                <TextBlock Text="Server / host name" />
                 <TextBox Text="{Binding Server, UpdateSourceTrigger=PropertyChanged}"
                          Margin="0,2,0,8" />
 
-                <TextBlock Text="Authentication" />
-                <ComboBox ItemsSource="{Binding AuthenticationTypes}"
-                          SelectedItem="{Binding AuthenticationType}"
-                          Margin="0,2,0,8" />
+                <TextBlock Text="Port (optional, uses the engine default when blank)" />
+                <TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,2,0,8" />
+
+                <!-- Authentication type: only engines with Windows auth (SQL Server). -->
+                <StackPanel Visibility="{Binding ShowAuthenticationType, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Authentication" />
+                    <ComboBox ItemsSource="{Binding AuthenticationTypes}"
+                              SelectedItem="{Binding AuthenticationType}"
+                              Margin="0,2,0,8" />
+                </StackPanel>
 
                 <TextBlock Text="Login" />
                 <TextBox Text="{Binding UserId, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{Binding IsSqlServerAuth}"
+                         IsEnabled="{Binding AreCredentialsEnabled}"
                          Margin="0,2,0,8" />
 
                 <TextBlock Text="Password" />
                 <PasswordBox x:Name="PasswordBox"
-                             IsEnabled="{Binding IsSqlServerAuth}"
+                             IsEnabled="{Binding AreCredentialsEnabled}"
                              Margin="0,2,0,8" />
 
                 <TextBlock Text="Database (optional)" />

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
 using LightSQL.Services.Mcp;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -72,7 +73,7 @@ namespace LightSQL.Tests
                 Assert.Equal(
                     new[] { "describe_table", "execute_query", "list_databases", "list_tables" },
                     tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal));
-                Assert.Contains("T-SQL", client.ServerInstructions);
+                Assert.Contains("Microsoft SQL Server", client.ServerInstructions);
 
                 CallToolResult result = await client.CallToolAsync(
                     "execute_query",
@@ -146,7 +147,7 @@ namespace LightSQL.Tests
         public async Task Start_Fails_WhenTheConnectionFails()
         {
             sqlService.ConnectFailure = new InvalidOperationException("Login failed.");
-            McpServerHostFactory factory = new(() => sqlService, new SqlStatementAnalyzer());
+            McpServerHostFactory factory = new(() => sqlService, new SqlStatementAnalyzer(), new DatabaseProviderRegistry());
             McpServerSettings settings = new() { Profile = new ConnectionProfile { Server = "nowhere" } };
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => factory.StartAsync(settings, CancellationToken.None));
@@ -159,7 +160,7 @@ namespace LightSQL.Tests
         /// <returns>The running server.</returns>
         private Task<IMcpServerHost> StartAsync(string? database = null)
         {
-            McpServerHostFactory factory = new(() => sqlService, new SqlStatementAnalyzer());
+            McpServerHostFactory factory = new(() => sqlService, new SqlStatementAnalyzer(), new DatabaseProviderRegistry());
 
             McpServerSettings settings = new()
             {

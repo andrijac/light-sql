@@ -1,15 +1,17 @@
 using LightSQL.Models;
-using LightSQL.Services;
+using LightSQL.Services.Database;
 using Xunit;
 
 namespace LightSQL.Tests
 {
     /// <summary>
-    /// Tests building connection strings from profiles for both authentication modes
-    /// and the raw connection-string mode.
+    /// Tests building SQL Server connection strings from profiles, for both authentication
+    /// modes and the raw connection-string mode.
     /// </summary>
-    public class ConnectionStringFactoryTests
+    public class SqlServerDatabaseProviderTests
     {
+        private readonly SqlServerDatabaseProvider provider = new();
+
         [Fact]
         public void WindowsAuth_UsesIntegratedSecurity_AndNoPassword()
         {
@@ -20,7 +22,7 @@ namespace LightSQL.Tests
                 Database = "master"
             };
 
-            string connectionString = ConnectionStringFactory.Build(profile);
+            string connectionString = provider.BuildConnectionString(profile, null);
 
             Assert.Contains("Integrated Security=True", connectionString);
             Assert.Contains("Data Source=localhost", connectionString);
@@ -39,10 +41,25 @@ namespace LightSQL.Tests
                 Password = "p@ss"
             };
 
-            string connectionString = ConnectionStringFactory.Build(profile);
+            string connectionString = provider.BuildConnectionString(profile, null);
 
             Assert.Contains("User ID=sa", connectionString);
             Assert.Contains("p@ss", connectionString);
+        }
+
+        [Fact]
+        public void Port_IsAppendedToDataSource()
+        {
+            ConnectionProfile profile = new()
+            {
+                Server = "localhost",
+                Port = 1433,
+                AuthenticationType = AuthenticationType.Windows
+            };
+
+            string connectionString = provider.BuildConnectionString(profile, null);
+
+            Assert.Contains("Data Source=localhost,1433", connectionString);
         }
 
         [Fact]
@@ -55,7 +72,7 @@ namespace LightSQL.Tests
                 Database = "master"
             };
 
-            string connectionString = ConnectionStringFactory.Build(profile, "AdventureWorks");
+            string connectionString = provider.BuildConnectionString(profile, "AdventureWorks");
 
             Assert.Contains("Initial Catalog=AdventureWorks", connectionString);
         }
@@ -70,7 +87,7 @@ namespace LightSQL.Tests
                 Password = "injected"
             };
 
-            string connectionString = ConnectionStringFactory.Build(profile);
+            string connectionString = provider.BuildConnectionString(profile, null);
 
             Assert.Contains("injected", connectionString);
         }

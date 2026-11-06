@@ -27,7 +27,7 @@ databases.
 | Section | Content |
 |---|---|
 | Header | Server name, **Start Server** / **Stop Server** buttons |
-| Server | Status, SQL Server instance, default database, how it signs in (Windows / SQL login name; never the password), port, endpoint URL (with **Copy**), transport, start time, number of tool calls, **Access** (the *Allow read-write* check box and the current mode) |
+| Server | Status, engine and server/host, default database, how it signs in (Windows / login name; never the password), port, endpoint URL (with **Copy**), transport, start time, number of tool calls, **Access** (the *Allow read-write* check box and the current mode) |
 | Connect an AI client | The ready-to-run Claude Code command and the Codex `config.toml` snippet, each with **Copy**; the tool list; a reminder that query results go to the AI provider |
 | Activity | One row per tool call, newest first: time, tool, database, SQL / argument (full text in the tooltip), result (errors in red), duration. **Clear** empties the log (the counter keeps counting). At most 500 rows are kept. |
 
@@ -43,7 +43,7 @@ it may then get a different port. Closing LightSQL stops all servers.
 | Mode | What AI clients can do |
 |---|---|
 | **Read-only** (default) | Only batches that read: `SELECT` / `WITH`, `DECLARE` / `SET` variables, `IF` / `WHILE` / `BEGIN`…`END`, `PRINT`, `USE`. Anything else is **rejected before it runs**, and accepted batches still run in a **transaction that is always rolled back**. |
-| **Read-write** | Any T-SQL: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, DDL, `EXEC`, … with the permissions of the connection's login. |
+| **Read-write** | Any SQL in the connected engine's dialect: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, DDL, `EXEC`/`CALL`, … with the permissions of the connection's login. |
 
 - Switch with the **Allow read-write (AI can change data)** check box in the tab.
   Turning it **on** asks for confirmation; turning it off does not. The change
@@ -52,16 +52,17 @@ it may then get a different port. Closing LightSQL stops all servers.
   read-only.
 - In read-write mode the tab header shows `[read-write]` and the access text is red.
 - **Rejected statements** (keywords found outside strings, comments and
-  `[bracketed]` names): `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `INTO`
-  (`SELECT … INTO`), `CREATE`, `ALTER`, `DROP`, `ENABLE`, `DISABLE`, `GRANT`,
-  `REVOKE`, `DENY`, `EXEC`/`EXECUTE`, `COMMIT`, `ROLLBACK`, `SAVE`, `TRAN`,
-  `TRANSACTION`, `BACKUP`, `RESTORE`, `DBCC`, `BULK`, `CHECKPOINT`, `KILL`,
-  `SHUTDOWN`, `RECONFIGURE`, `SETUSER`, `WRITETEXT`, `UPDATETEXT`, `OPENROWSET`,
-  `OPENQUERY`, `OPENDATASOURCE`, `SEND`, `RECEIVE`; also a batch that starts with a
+  `[bracketed]` / `"quoted"` / `` `backtick` `` names): `INSERT`, `UPDATE`, `DELETE`,
+  `MERGE`, `TRUNCATE`, `INTO` (`SELECT … INTO`), `CREATE`, `ALTER`, `DROP`, `ENABLE`,
+  `DISABLE`, `GRANT`, `REVOKE`, `DENY`, `EXEC`/`EXECUTE`, `COMMIT`, `ROLLBACK`,
+  `SAVE`, `TRAN`, `TRANSACTION`, `BACKUP`, `RESTORE`, `DBCC`, `BULK`, `CHECKPOINT`,
+  `KILL`, `SHUTDOWN`, `RECONFIGURE`, `SETUSER`, `WRITETEXT`, `UPDATETEXT`,
+  `OPENROWSET`, `OPENQUERY`, `OPENDATASOURCE`, `SEND`, `RECEIVE`, and the cross-engine
+  `COPY`, `CALL`, `LOCK`, `VACUUM`, `LOAD`, `RENAME`; also a batch that starts with a
   name, which T-SQL runs as a procedure without `EXEC` (`sp_configure 'x', 1`).
-  The check errs on the side of blocking: an unbracketed column named like a
-  keyword (e.g. `Update`) is rejected — write `[Update]`. Stored procedures and
-  table variables / `#temp` inserts need read-write.
+  The check errs on the side of blocking: an unquoted column named like a keyword
+  (e.g. `Update`) is rejected — quote it. Stored procedures and table variables /
+  `#temp` inserts need read-write.
 - The AI receives an error such as *"Rejected: this MCP server is read-only and
   the batch contains INSERT … The user can switch the server to read-write in
   LightSQL"*; the activity log shows **Blocked (read-only): INSERT**.
@@ -93,7 +94,7 @@ If the server is restarted on another port, update the client's URL.
 
 | Tool | Arguments | Returns |
 |---|---|---|
-| `list_databases` | – | JSON array of online database names |
+| `list_databases` | – | JSON array of database (schema, for MySQL) names |
 | `list_tables` | `database?` | `{database, objects:[{schema, name, type: table/view}]}` |
 | `describe_table` | `table` (`Orders`, `sales.Orders`, `[sales].[Order Details]`), `schema?`, `database?` | `{database, schema, name, columns:[{name, type, nullable}]}` |
 | `execute_query` | `sql`, `database?`, `maxRows?` (default 200, max 5000); read-only unless allowed (see Access mode) | `{success, database, elapsedMs, recordsAffected, messages, resultSets:[{columns:[{name,type}], rows:[[...]], totalRows, truncated}]}` |
@@ -102,15 +103,15 @@ If the server is restarted on another port, update the client's URL.
 - Values: NULL → `null`, numbers/booleans native, dates ISO 8601, binary `0x...`,
   text longer than 4000 characters is cut with `...`.
 - A failed batch (SQL error) returns an MCP *error result* whose text is the same
-  JSON, including the SQL Server messages, so the AI can correct its query.
-- Each call runs on a **fresh pooled connection**, like the query tabs: `#temp`
-  tables, `SET` options and `USE` do not carry over to the next call (the result
-  says so when a batch ran `USE`).
+  JSON, including the server's error messages, so the AI can correct its query.
+- Each call runs on a **fresh pooled connection**, like the query tabs: temporary
+  tables, session settings and `USE` do not carry over to the next call (the result
+  says so when a batch ran `USE`; PostgreSQL has no `USE`).
 - The read-only tools are annotated `readOnly`; `execute_query` is annotated
   `destructive` (annotations are fixed, while the mode can change at runtime), so
   clients that honour annotations ask before running it.
-- On connect, the client receives *instructions* naming the server, the default
-  database, the read-only default and the rules above.
+- On connect, the client receives *instructions* naming the engine, the server, the
+  default database, the read-only default and the rules above.
 
 ## Security
 
@@ -136,9 +137,9 @@ If the server is restarted on another port, update the client's URL.
 |---|---|
 | `Services/Mcp/IMcpServerHostFactory`, `McpServerHostFactory` | Connects a new `SqlConnectionService` with the profile (validating the login first), finds a port, builds an ASP.NET Core `WebApplication` (Kestrel on `IPAddress.Loopback`, `CreateSlimBuilder`, logging cleared) with the official MCP C# SDK (`AddMcpServer().WithHttpTransport(Stateless = true).WithTools(tools)`, `MapMcp("/mcp")`) and the request guard middleware. Retries the next port when binding fails (`IOException`), up to 10 times. |
 | `IMcpServerHost`, `McpServerHost` | A running server: `Port`, `Endpoint`, `StopAsync` (3 s grace, then disposes; safe to call twice). |
-| `McpDatabaseTools` | The four tools (`[McpServerToolType]`, `[McpServerTool]`), each timed and reported through `McpServerSettings.ToolCalled`; failures become `CallToolResult { IsError = true }`. `ParseObjectName` splits `schema.name` (bracket-aware). `execute_query` reads `McpServerSettings.GetAccessMode()` on every call: read-only → `ISqlStatementAnalyzer.FindWriteOperation` (reject) then `ISqlConnectionService.ExecuteReadOnlyBatchAsync`; read-write → `ExecuteBatchAsync`. |
-| `SqlStatementAnalyzer.FindWriteOperation` | Strips comments, literals and quoted names, extracts words (skipping `@variables` / `#temp` names), returns the first blocked keyword, or `procedure call` when the first word is not an allowed batch starter. |
-| `SqlConnectionService.ExecuteReadOnlyBatchAsync` | Same as `ExecuteBatchAsync` inside a `SqlTransaction` that is rolled back after the reader closes (an already-ended transaction is ignored). |
+| `McpDatabaseTools` | The four tools (`[McpServerToolType]`, `[McpServerTool]`), each timed and reported through `McpServerSettings.ToolCalled`; failures become `CallToolResult { IsError = true }`. `ParseObjectName` splits `schema.name` (bracket-aware; the default schema comes from the active dialect). `execute_query` reads `McpServerSettings.GetAccessMode()` on every call: read-only → `ISqlStatementAnalyzer.FindWriteOperation` (reject) then `ISqlConnectionService.ExecuteReadOnlyBatchAsync`; read-write → `ExecuteBatchAsync`. |
+| `SqlStatementAnalyzer.FindWriteOperation` | Strips comments, literals and `[bracket]` / `"quote"` / `` `backtick` `` names, extracts words (skipping `@variables` / `#temp` names), returns the first blocked keyword, or `procedure call` when the first word is not an allowed batch starter. |
+| `SqlConnectionService.ExecuteReadOnlyBatchAsync` | Same as `ExecuteBatchAsync` inside a `DbTransaction` that is rolled back after the reader closes (an already-ended transaction is ignored). |
 | `Models/McpAccessMode` | `ReadOnly = 1`, `ReadWrite = 2`. |
 | `McpResultFormatter` | Compact JSON for results, objects, columns; row and cell limits; value conversion (`ToJsonValue`). |
 | `McpPortFinder` | First free loopback port in 9000–9999 (`FindAvailablePort` is pure and unit-tested; `IsLoopbackPortAvailable` probes with an exclusive `TcpListener`). |

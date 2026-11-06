@@ -254,13 +254,13 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public void BuildInstructions_NamesServerAndDefaultDatabase()
+        public void BuildInstructions_NamesEngineServerAndDefaultDatabase()
         {
-            string instructions = McpServerHostFactory.BuildInstructions("SQL01", "Sales");
+            string instructions = McpServerHostFactory.BuildInstructions("PostgreSQL", "pg01", "Sales");
 
-            Assert.Contains("SQL01", instructions);
+            Assert.Contains("pg01", instructions);
             Assert.Contains("'Sales'", instructions);
-            Assert.Contains("T-SQL", instructions);
+            Assert.Contains("PostgreSQL", instructions);
         }
 
         /// <summary>

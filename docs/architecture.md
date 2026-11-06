@@ -1,8 +1,10 @@
 # LightSQL — Architecture
 
-LightSQL is a lightweight WPF desktop SQL Server client targeting **.NET 10**
-(`net10.0-windows`). It follows the **MVVM** pattern with constructor dependency
-injection.
+LightSQL is a lightweight WPF desktop SQL client targeting **.NET 10**
+(`net10.0-windows`). It supports **Microsoft SQL Server**, **PostgreSQL** and
+**MySQL / MariaDB** through a database-provider abstraction (see
+[database-providers.md](database-providers.md)). It follows the **MVVM** pattern
+with constructor dependency injection.
 
 ## Solution layout
 
@@ -13,6 +15,7 @@ src/LightSQL/
 ├─ LightSQL/                     The WPF application
 │  ├─ Models/                    Plain data types (DTOs, enums)
 │  ├─ Services/                  Infrastructure (SQL access, storage, dialogs)
+│  │  ├─ Database/               Per-engine providers + dialects + registry (SQL Server, PostgreSQL, MySQL)
 │  │  └─ Mcp/                    MCP server for AI clients (host, tools, port finder)
 │  ├─ ViewModels/               View models (MVVM)
 │  ├─ Views/                    Windows and user controls (XAML + code-behind)
@@ -32,7 +35,9 @@ src/LightSQL/
 | Package | Role |
 |---|---|
 | AvalonEdit | SQL editor: syntax highlighting, line numbers, caret tracking |
-| Microsoft.Data.SqlClient | SQL Server connectivity |
+| Microsoft.Data.SqlClient | Microsoft SQL Server connectivity (`SqlServerDatabaseProvider`) |
+| Npgsql | PostgreSQL connectivity (`PostgreSqlDatabaseProvider`) |
+| MySqlConnector | MySQL / MariaDB connectivity (`MySqlDatabaseProvider`) |
 | CommunityToolkit.Mvvm | `ObservableObject`, `[ObservableProperty]`, `[RelayCommand]` |
 | Microsoft.Extensions.DependencyInjection | Service / view-model wiring |
 | ModelContextProtocol.AspNetCore | MCP server (official C# SDK) hosted in Kestrel; brings the `Microsoft.AspNetCore.App` shared framework |
@@ -49,22 +54,36 @@ Query tabs (`QueryTabViewModel`, each with its own `ResultsViewModel`) and MCP
 server tabs (`McpServerTabViewModel`) are created by `MainViewModel` at runtime and
 are not registered in the container. `Func<ISqlConnectionService>` is registered so
 `McpServerHostFactory` can give every MCP server its own SQL service.
+`IDatabaseProviderRegistry` (a stateless singleton holding one provider per engine)
+is injected into `SqlConnectionService`, `ConnectionStore`, `ConnectionDialogViewModel`
+and `McpServerHostFactory`.
 
 ## Layers
 
 - **Models** — no behaviour beyond small helpers. Enums start at `1`.
 - **Services** — all I/O and SQL access sits behind interfaces:
+  - `Database/` — the multi-engine abstraction. `IDatabaseProvider` (connection
+    creation, connection-string building, metadata, messages, error formatting) and
+    `ISqlDialect` (pure SQL text: quoting, SELECT TOP/LIMIT, CREATE/DROP) have one
+    implementation per engine (`SqlServer*`, `PostgreSql*`, `MySql*`);
+    `IDatabaseProviderRegistry` / `DatabaseProviderRegistry` resolves the provider for
+    a `ConnectionProfile.Engine`. See [database-providers.md](database-providers.md).
   - `ISqlConnectionService` / `SqlConnectionService` — connect, execute batches,
-    read metadata, create databases. Opens a fresh pooled connection per operation.
-    `ExecuteBatchAsync(sql, database, token)` takes the target database explicitly
-    (null = the connection's default, `CurrentDatabase`), so each query tab runs in
-    its own database and several tabs can execute concurrently. There is no shared
-    "current database" state to mutate. After a batch it compares
-    `SqlConnection.Database` with the database it started in (read in a `finally`,
-    so it also works when the batch failed) and reports a `USE` switch in
+    read metadata, create databases, for any engine. It owns the connection lifetime
+    over the ADO.NET base types (`DbConnection` / `DbCommand` / `DbDataReader` /
+    `DbTransaction`) and delegates everything engine-specific to the active
+    `IDatabaseProvider` (chosen from the profile's engine). It exposes `Dialect`,
+    `AdministrativeDatabase` and `Engine`. Opens a fresh pooled connection per
+    operation. `ExecuteBatchAsync(sql, database, token)` takes the target database
+    explicitly (null = the connection's default, `CurrentDatabase`), so each query tab
+    runs in its own database and several tabs can execute concurrently. There is no
+    shared "current database" state to mutate. After a batch it compares
+    `DbConnection.Database` with the database it started in (read in a `finally`, so it
+    also works when the batch failed) and reports a `USE` switch in
     `QueryExecutionResult.NewDatabaseContext` (static, unit-tested
-    `GetNewDatabaseContext`). `ExecuteReadOnlyBatchAsync` runs a batch in a
-    transaction that is always rolled back (MCP read-only mode).
+    `GetNewDatabaseContext`; PostgreSQL has no `USE`, so it never switches).
+    `ExecuteReadOnlyBatchAsync` runs a batch in a transaction that is always rolled
+    back (MCP read-only mode).
   - `IConnectionStore` / `ConnectionStore` — saved connections (JSON + DPAPI).
     Passwords are stripped from raw connection strings before saving; when the
     profile saves its password, the typed or embedded password is stored encrypted
@@ -81,11 +100,14 @@ are not registered in the container. `Func<ISqlConnectionService>` is registered
     `WindowsSystemThemeProvider` report the Windows light/dark mode for the Auto
     theme; `WindowTitleBar` makes title bars dark. See [themes.md](themes.md).
   - `ISqlStatementAnalyzer` / `SqlStatementAnalyzer` — UPDATE/DELETE-WHERE guard,
-    and `FindWriteOperation` for the MCP server's read-only mode.
+    and `FindWriteOperation` for the MCP server's read-only mode. A conservative,
+    cross-engine scanner: it neutralizes `'literals'`, comments and
+    `[bracketed]` / `"quoted"` / `` `backtick` `` identifiers before matching keywords.
   - `ICredentialProtector` / `DpapiCredentialProtector` — DPAPI encrypt/decrypt.
   - `IDialogService` / `DialogService` — message boxes, text prompt, the Windows
     Open (multi-select) / Save As file dialogs, modal dialogs.
-  - `ConnectionStringFactory` — builds connection strings from a profile.
+  - Connection strings are built by each `IDatabaseProvider.BuildConnectionString`
+    (there is no longer a shared `ConnectionStringFactory`).
   - `IClipboardService` / `ClipboardService` — copies text (MCP client setup).
   - `Mcp/` — `IMcpServerHostFactory` / `McpServerHostFactory` start an MCP server
     (own `SqlConnectionService`, loopback port 9000+, stateless Streamable HTTP at
@@ -131,9 +153,13 @@ are not registered in the container. `Func<ISqlConnectionService>` is registered
     text, both without marking the tab modified; `MarkSaved` records a save;
     `IsPristine` identifies an untouched new tab.
   - `ConnectionDialogViewModel` — the connection form and saved-connection list.
-    Selecting a saved connection (`SelectedSavedConnection`) copies it into the form
-    (`LoadSelected`) and raises `SavedConnectionLoaded`, which the dialog's
-    code-behind uses to fill its `PasswordBox`es (passwords are never bound).
+    The **Database type** picker (`Engines` / `SelectedEngine`) drives which fields
+    show: `ShowAuthenticationType` (SQL Server only) and `AreCredentialsEnabled`
+    (always for PostgreSQL / MySQL; under SQL auth for SQL Server). It carries the
+    engine and optional port into the profile. Selecting a saved connection
+    (`SelectedSavedConnection`) copies it into the form (`LoadSelected`) and raises
+    `SavedConnectionLoaded`, which the dialog's code-behind uses to fill its
+    `PasswordBox`es (passwords are never bound).
   - `ResultsViewModel`, `TreeNodeViewModel`, `ObjectExplorerViewModel`,
     `OptionsViewModel` support specific views. `OptionsViewModel` previews a
     chosen theme at once and `RevertThemePreview` (called when the dialog closes)
@@ -198,6 +224,9 @@ aborts only that tab's query and tabs can run in parallel.
   switched to, and the next batch is opened in it. The toolbar **Database**
   dropdown also changes the selected tab's database.
 - Open tabs are not restored after restarting the application.
-- Dropping a database that has active/pooled connections fails with a SQL error
-  (standard SQL Server behaviour); close other usage first.
+- Dropping a database that has active/pooled connections fails with a SQL error;
+  close other usage first. (PostgreSQL also cannot drop the database you are connected
+  to — drops run from the engine's administrative database, e.g. `postgres`.)
+- The SQL editor's syntax highlighting is tuned for T-SQL; PostgreSQL- and
+  MySQL-specific keywords may not all be highlighted, but queries still run.
 - Object scripting ("Script as CREATE") is not implemented yet.

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using LightSQL.Models;
-using Microsoft.Data.SqlClient;
+using LightSQL.Services.Database;
 
 namespace LightSQL.Services
 {
@@ -23,14 +23,16 @@ namespace LightSQL.Services
 
         private readonly string filePath;
         private readonly ICredentialProtector credentialProtector;
+        private readonly IDatabaseProviderRegistry providerRegistry;
         private readonly List<ConnectionProfile> profiles;
 
         /// <summary>
         /// Creates the store using the default connections file location.
         /// </summary>
         /// <param name="credentialProtector">Protector used to encrypt/decrypt passwords.</param>
-        public ConnectionStore(ICredentialProtector credentialProtector)
-            : this(credentialProtector, AppPaths.ConnectionsFilePath)
+        /// <param name="providerRegistry">Resolves the engine provider used to parse raw connection strings.</param>
+        public ConnectionStore(ICredentialProtector credentialProtector, IDatabaseProviderRegistry providerRegistry)
+            : this(credentialProtector, providerRegistry, AppPaths.ConnectionsFilePath)
         {
         }
 
@@ -38,10 +40,12 @@ namespace LightSQL.Services
         /// Creates the store using an explicit file path (used by tests).
         /// </summary>
         /// <param name="credentialProtector">Protector used to encrypt/decrypt passwords.</param>
+        /// <param name="providerRegistry">Resolves the engine provider used to parse raw connection strings.</param>
         /// <param name="filePath">Full path of the connections JSON file.</param>
-        public ConnectionStore(ICredentialProtector credentialProtector, string filePath)
+        public ConnectionStore(ICredentialProtector credentialProtector, IDatabaseProviderRegistry providerRegistry, string filePath)
         {
             this.credentialProtector = credentialProtector ?? throw new ArgumentNullException(nameof(credentialProtector));
+            this.providerRegistry = providerRegistry ?? throw new ArgumentNullException(nameof(providerRegistry));
             this.filePath = filePath;
             profiles = Load();
         }
@@ -140,13 +144,15 @@ namespace LightSQL.Services
             {
                 ConnectionProfile copy = profile.Clone();
 
+                IDatabaseProvider provider = providerRegistry.Get(copy.Engine);
+
                 // A password typed into the dialog wins; otherwise use one embedded in
                 // a raw connection string, so it survives being stripped below.
                 string? passwordToSave = copy.Password;
 
                 if (string.IsNullOrEmpty(passwordToSave) == true && copy.UseRawConnectionString == true)
                 {
-                    passwordToSave = ExtractPassword(copy.RawConnectionString);
+                    passwordToSave = provider.ExtractPassword(copy.RawConnectionString);
                 }
 
                 if (copy.SavePassword == true && string.IsNullOrEmpty(passwordToSave) == false)
@@ -161,7 +167,7 @@ namespace LightSQL.Services
                 // Never serialize a password embedded in a raw connection string.
                 if (copy.UseRawConnectionString == true)
                 {
-                    copy.RawConnectionString = StripPassword(copy.RawConnectionString);
+                    copy.RawConnectionString = provider.StripPassword(copy.RawConnectionString);
                 }
 
                 // The plaintext password is [JsonIgnore], but clear it defensively.
@@ -172,58 +178,6 @@ namespace LightSQL.Services
 
             string json = JsonSerializer.Serialize(sanitized, serializerOptions);
             File.WriteAllText(filePath, json);
-        }
-
-        /// <summary>
-        /// Reads the password embedded in a raw connection string, if any.
-        /// </summary>
-        /// <param name="connectionString">The raw connection string.</param>
-        /// <returns>The embedded password, or null when there is none or the string cannot be parsed.</returns>
-        private static string? ExtractPassword(string connectionString)
-        {
-            if (string.IsNullOrWhiteSpace(connectionString) == true)
-            {
-                return null;
-            }
-
-            try
-            {
-                SqlConnectionStringBuilder builder = new(connectionString);
-
-                return string.IsNullOrEmpty(builder.Password) == true ? null : builder.Password;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Removes any password from a raw connection string.
-        /// </summary>
-        /// <param name="connectionString">The raw connection string.</param>
-        /// <returns>The connection string without a password.</returns>
-        private static string StripPassword(string connectionString)
-        {
-            if (string.IsNullOrWhiteSpace(connectionString) == true)
-            {
-                return connectionString;
-            }
-
-            try
-            {
-                SqlConnectionStringBuilder builder = new(connectionString);
-                builder.Remove("Password");
-                builder.Remove("PWD");
-
-                return builder.ConnectionString;
-            }
-            catch (Exception)
-            {
-                // If the string cannot be parsed it cannot be used to connect either;
-                // return empty rather than risk leaking an embedded password.
-                return string.Empty;
-            }
         }
     }
 }

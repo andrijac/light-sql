@@ -1,10 +1,13 @@
 using LightSQL.Models;
+using LightSQL.Services.Database;
 
 namespace LightSQL.Services
 {
     /// <summary>
-    /// Manages the active SQL Server connection and runs queries and metadata
-    /// lookups against it. All database work is asynchronous so the UI stays
+    /// Manages the active database connection and runs queries and metadata lookups
+    /// against it, for any supported engine (SQL Server, PostgreSQL, MySQL). The
+    /// engine-specific work is delegated to an <see cref="IDatabaseProvider"/> chosen
+    /// from the connected profile. All database work is asynchronous so the UI stays
     /// responsive.
     /// </summary>
     public interface ISqlConnectionService
@@ -24,6 +27,23 @@ namespace LightSQL.Services
         /// batch is executed without an explicit database. Null when disconnected.
         /// </summary>
         string? CurrentDatabase { get; }
+
+        /// <summary>
+        /// The engine of the active connection, or null when disconnected.
+        /// </summary>
+        DatabaseEngine? Engine { get; }
+
+        /// <summary>
+        /// The SQL dialect of the active connection (identifier quoting, SELECT TOP/LIMIT,
+        /// CREATE/DROP), or null when disconnected. Used by the UI to build engine-correct SQL.
+        /// </summary>
+        ISqlDialect? Dialect { get; }
+
+        /// <summary>
+        /// The database that server-level operations run in for the active engine (for
+        /// example "master" or "postgres"), or null when disconnected or not required.
+        /// </summary>
+        string? AdministrativeDatabase { get; }
 
         /// <summary>
         /// Opens and validates a connection described by the given profile.
