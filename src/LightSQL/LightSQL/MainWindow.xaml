@@ -80,6 +80,10 @@
             </MenuItem>
 
             <MenuItem Header="_Tools">
+                <MenuItem Header="Metadata Extraction _Prompt..."
+                          Command="{Binding ShowMetadataPromptCommand}"
+                          ToolTip="Show the AI prompt that generates database metadata JSON from a code repository" />
+                <Separator />
                 <MenuItem Header="_Options..." Command="{Binding ShowOptionsCommand}" />
             </MenuItem>
 

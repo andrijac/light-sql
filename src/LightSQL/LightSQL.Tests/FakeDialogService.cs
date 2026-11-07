@@ -160,5 +160,16 @@ namespace LightSQL.Tests
 
             return MetadataDialogResult;
         }
+
+        /// <summary>
+        /// How many times <see cref="ShowMetadataPromptDialog"/> was called.
+        /// </summary>
+        public int MetadataPromptDialogCount { get; private set; }
+
+        /// <inheritdoc />
+        public void ShowMetadataPromptDialog()
+        {
+            MetadataPromptDialogCount++;
+        }
     }
 }

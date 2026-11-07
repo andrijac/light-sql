@@ -85,5 +85,10 @@ namespace LightSQL.Services
         /// <param name="database">The database to prefill, or null.</param>
         /// <returns>True if the user saved the metadata.</returns>
         bool ShowMetadataDialog(string? connectionName, string? database);
+
+        /// <summary>
+        /// Shows the Metadata Extraction Prompt dialog (the embedded prompt plus a Copy button).
+        /// </summary>
+        void ShowMetadataPromptDialog();
     }
 }

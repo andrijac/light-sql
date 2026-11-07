@@ -233,6 +233,19 @@ namespace LightSQL.Services
             return viewModel.Saved;
         }
 
+        /// <inheritdoc />
+        public void ShowMetadataPromptDialog()
+        {
+            MetadataPromptDialogViewModel viewModel = serviceProvider.GetRequiredService<MetadataPromptDialogViewModel>();
+
+            MetadataPromptDialog dialog = new(viewModel)
+            {
+                Owner = GetOwner()
+            };
+
+            dialog.ShowDialog();
+        }
+
         /// <summary>
         /// Shows a Windows common dialog, owned by the main window when there is one.
         /// </summary>

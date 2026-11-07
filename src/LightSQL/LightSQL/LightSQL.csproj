@@ -32,6 +32,8 @@
   <ItemGroup>
     <!-- T-SQL highlighting definition loaded at runtime via HighlightingManager. -->
     <EmbeddedResource Include="Editor\SqlSyntax.xshd" />
+    <!-- The database-metadata extraction prompt shown in Tools -> Metadata Extraction Prompt. -->
+    <EmbeddedResource Include="Resources\MetadataExtractionPrompt.txt" />
   </ItemGroup>
 
 </Project>

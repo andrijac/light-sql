@@ -135,8 +135,9 @@ To work with another database, start a second server for it; each gets its own t
 
 You can give the AI more than the live catalog exposes — primary and foreign keys,
 relationships, enum meanings, units, and which filters to apply — by pasting a JSON
-metadata document for a connection and database. See [mcp-metadata.md](mcp-metadata.md)
-for the full workflow and a prompt that generates the JSON.
+metadata document for a connection and database. LightSQL ships a prompt that generates
+that JSON from a code repository under **Tools → Metadata Extraction Prompt…** (with a
+**Copy** button). See [mcp-metadata.md](mcp-metadata.md) for the full workflow.
 
 - Open **Database → Database Metadata…**, choose the connection and database, paste the
   JSON and **Save**. It is stored per connection + database in

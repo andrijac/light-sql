@@ -97,6 +97,7 @@ namespace LightSQL
             services.AddTransient<ConnectionDialogViewModel>();
             services.AddTransient<OptionsViewModel>();
             services.AddTransient<MetadataDialogViewModel>();
+            services.AddTransient<MetadataPromptDialogViewModel>();
 
             // Windows.
             services.AddSingleton<MainWindow>();

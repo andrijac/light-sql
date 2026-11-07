@@ -111,6 +111,8 @@ and `McpServerHostFactory`.
   - `IClipboardService` / `ClipboardService` — copies text (MCP client setup).
   - `IMetadataStore` / `MetadataStore` — per connection + database JSON metadata in
     `%APPDATA%\LightSQL\metadata.json`, sent to AI clients as extra MCP instructions.
+  - `PromptLibrary` — reads embedded text prompts (the metadata-extraction prompt shown in
+    Tools → Metadata Extraction Prompt).
   - `Mcp/` — `IMcpServerHostFactory` / `McpServerHostFactory` start an MCP server
     (own `SqlConnectionService`, loopback port 9000+, stateless Streamable HTTP at
     `/mcp`, Host/Origin guard); `McpDatabaseTools` (the tools, each locked to the
@@ -186,7 +188,7 @@ and `McpServerHostFactory`.
     (the last two bind to `MainViewModel.ShowLineNumbers` / `EditorFontSize`, which
     are re-raised when Options are saved).
   - `McpServerTabView` — MCP server details, client setup and activity grid.
-  - `ConnectionDialog`, `OptionsDialog`, `MetadataDialog`, `InputDialog`.
+  - `ConnectionDialog`, `OptionsDialog`, `MetadataDialog`, `MetadataPromptDialog`, `InputDialog`.
 - **Controls** — `ResultGridsPanel` lays out the result grids: they fill the visible
   results area (one grid = whole pane, several share it equally), with a minimum
   height per grid, beyond which the panel grows and the surrounding `ScrollViewer`

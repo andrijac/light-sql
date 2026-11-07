@@ -1,0 +1,50 @@
+<Window x:Class="LightSQL.Views.MetadataPromptDialog"
+        Style="{DynamicResource Theme.WindowStyle}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Width="760"
+        Height="620"
+        Title="Metadata Extraction Prompt">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   Text="Run this prompt with an AI agent (e.g. Claude Code) inside the repository of the application that owns the database. Paste its output into Database → Database Metadata…" />
+
+        <!-- The prompt, read-only and monospace so it copies cleanly. -->
+        <TextBox Grid.Row="1"
+                 Text="{Binding Prompt, Mode=OneWay}"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Auto"
+                 FontFamily="Consolas"
+                 TextWrapping="NoWrap" />
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <TextBlock Text="{Binding CopyMessage}"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0"
+                       Foreground="{DynamicResource Theme.SecondaryForeground}" />
+            <Button Content="Copy"
+                    Width="90"
+                    Margin="0,0,8,0"
+                    Command="{Binding CopyCommand}" />
+            <Button Content="Close"
+                    Width="90"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

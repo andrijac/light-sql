@@ -188,6 +188,16 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public void ShowMetadataPrompt_OpensThePromptDialog()
+        {
+            MainViewModel viewModel = CreateViewModel();
+
+            viewModel.ShowMetadataPromptCommand.Execute(null);
+
+            Assert.Equal(1, dialogService.MetadataPromptDialogCount);
+        }
+
+        [Fact]
         public async Task StopAllMcpServers_StopsEveryServer()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();

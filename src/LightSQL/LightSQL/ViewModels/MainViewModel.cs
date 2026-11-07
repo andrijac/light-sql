@@ -590,6 +590,16 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Shows the Metadata Extraction Prompt dialog (Tools menu), from which the user can
+        /// copy the AI prompt that generates database metadata JSON from a code repository.
+        /// </summary>
+        [RelayCommand]
+        private void ShowMetadataPrompt()
+        {
+            dialogService.ShowMetadataPromptDialog();
+        }
+
+        /// <summary>
         /// Shows the Options dialog and re-applies editor settings to all tabs when saved.
         /// </summary>
         [RelayCommand]
