@@ -144,10 +144,10 @@
                     <TextBlock Grid.Row="8" Grid.Column="0" Text="Tool calls:" Style="{StaticResource DetailLabel}" />
                     <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding CallCount}" Style="{StaticResource DetailValue}" />
 
-                    <!-- Read-only by default; turning read-write on asks for confirmation. -->
+                    <!-- Read-only by default; turning write-access on asks for confirmation. -->
                     <TextBlock Grid.Row="9" Grid.Column="0" Text="Access:" Style="{StaticResource DetailLabel}" />
                     <StackPanel Grid.Row="9" Grid.Column="1" Margin="0,3">
-                        <CheckBox Content="Allow read-write (AI can change data)"
+                        <CheckBox Content="Allow write-access (AI can change data)"
                                   IsChecked="{Binding IsReadWrite, Mode=TwoWay}"
                                   ToolTip="Off: only reading queries are allowed and every batch is rolled back. On: any T-SQL runs. Takes effect immediately." />
                         <TextBlock Text="{Binding AccessText}" Margin="0,3,0,0" TextWrapping="Wrap">
@@ -197,7 +197,7 @@
                     <TextBlock Margin="0,6,0,0"
                                TextWrapping="Wrap"
                                Foreground="{DynamicResource Theme.ErrorForeground}"
-                               Text="Query results are sent to the AI client and its model provider. In read-write mode execute_query can change data, so review what the AI runs. Never paste passwords, API keys, tokens or connection strings into the chat." />
+                               Text="Query results are sent to the AI client and its model provider. With write-access, execute_query can change data, so review what the AI runs. Never paste passwords, API keys, tokens or connection strings into the chat." />
 
                     <TextBlock Margin="0,6,0,0"
                                Text="{Binding CopyMessage}"

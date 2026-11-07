@@ -302,7 +302,8 @@ namespace LightSQL.Tests
                 dialogService,
                 new ObjectExplorerViewModel(sqlService, dialogService),
                 new FakeMcpServerHostFactory(),
-                new FakeClipboardService());
+                new FakeClipboardService(),
+                new FakeMetadataStore());
         }
     }
 }

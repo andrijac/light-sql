@@ -44,6 +44,18 @@ namespace LightSQL.Services
         }
 
         /// <summary>
+        /// Full path of the database-metadata JSON file (per connection + database
+        /// metadata sent to AI clients by MCP servers).
+        /// </summary>
+        public static string MetadataFilePath
+        {
+            get
+            {
+                return Path.Combine(ConfigDirectory, "metadata.json");
+            }
+        }
+
+        /// <summary>
         /// Ensures a directory exists, creating it (and any parents) if needed.
         /// </summary>
         /// <param name="path">The directory path to ensure.</param>

@@ -120,6 +120,49 @@ namespace LightSQL.Tests
         }
 
         [Fact]
+        public async Task Client_IsRefusedAForeignDatabase()
+        {
+            IMcpServerHost host = await StartAsync("Sales");
+
+            try
+            {
+                await using McpClient client = await McpClient.CreateAsync(
+                    new HttpClientTransport(new HttpClientTransportOptions { Endpoint = new Uri(host.Endpoint) }));
+
+                CallToolResult result = await client.CallToolAsync(
+                    "execute_query",
+                    new Dictionary<string, object?> { ["sql"] = "SELECT 1", ["database"] = "Other" });
+
+                Assert.True(result.IsError);
+                Assert.Contains("locked", Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text);
+                Assert.Empty(sqlService.ExecutedBatches);
+            }
+            finally
+            {
+                await host.StopAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Server_IncludesMetadataInInstructions_WhenProvided()
+        {
+            IMcpServerHost host = await StartAsync("Sales", "{\"tables\":[{\"name\":\"Orders\"}]}");
+
+            try
+            {
+                await using McpClient client = await McpClient.CreateAsync(
+                    new HttpClientTransport(new HttpClientTransportOptions { Endpoint = new Uri(host.Endpoint) }));
+
+                Assert.Contains("Database metadata", client.ServerInstructions);
+                Assert.Contains("Orders", client.ServerInstructions);
+            }
+            finally
+            {
+                await host.StopAsync();
+            }
+        }
+
+        [Fact]
         public async Task Server_RejectsBrowserRequestsFromOtherSites()
         {
             IMcpServerHost host = await StartAsync();
@@ -157,8 +200,9 @@ namespace LightSQL.Tests
         /// Starts a server over the fake SQL service.
         /// </summary>
         /// <param name="database">The default database, or null.</param>
+        /// <param name="metadata">The metadata instructions to include, or null.</param>
         /// <returns>The running server.</returns>
-        private Task<IMcpServerHost> StartAsync(string? database = null)
+        private Task<IMcpServerHost> StartAsync(string? database = null, string? metadata = null)
         {
             McpServerHostFactory factory = new(() => sqlService, new SqlStatementAnalyzer(), new DatabaseProviderRegistry());
 
@@ -166,6 +210,7 @@ namespace LightSQL.Tests
             {
                 Profile = new ConnectionProfile { Server = "fake-server" },
                 DefaultDatabase = database,
+                MetadataInstructions = metadata,
                 ToolCalled = call =>
                 {
                     lock (calls)

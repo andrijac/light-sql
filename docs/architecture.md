@@ -109,10 +109,13 @@ and `McpServerHostFactory`.
   - Connection strings are built by each `IDatabaseProvider.BuildConnectionString`
     (there is no longer a shared `ConnectionStringFactory`).
   - `IClipboardService` / `ClipboardService` — copies text (MCP client setup).
+  - `IMetadataStore` / `MetadataStore` — per connection + database JSON metadata in
+    `%APPDATA%\LightSQL\metadata.json`, sent to AI clients as extra MCP instructions.
   - `Mcp/` — `IMcpServerHostFactory` / `McpServerHostFactory` start an MCP server
     (own `SqlConnectionService`, loopback port 9000+, stateless Streamable HTTP at
-    `/mcp`, Host/Origin guard); `McpDatabaseTools` (the tools), `McpResultFormatter`
-    (JSON), `McpPortFinder`, `McpRequestGuard`. See [mcp-server.md](mcp-server.md).
+    `/mcp`, Host/Origin guard); `McpDatabaseTools` (the tools, each locked to the
+    server's single database), `McpResultFormatter` (JSON), `McpPortFinder`,
+    `McpRequestGuard`. See [mcp-server.md](mcp-server.md).
 - **ViewModels**
   - `DocumentTabViewModel` — abstract base of every tab in the document strip
     (`Header`, `ToolTip`, `DisplayName`, `IsSelected`, `OnClosed()` called after the
@@ -122,8 +125,9 @@ and `McpServerHostFactory`.
     `QueryTabs` / `McpServerTabs` filter them by type and `SelectedQueryTab` is the
     selected tab when it is a query tab (null for an MCP tab); the toolbar,
     status bar, Execute, Cancel and Save act on `SelectedQueryTab`.
-    `StartMcpServer` / `OpenMcpServerTabAsync(database)` open an MCP server tab for
-    the connection profile remembered at Connect; `StopAllMcpServersAsync` runs
+    `StartMcpServer` / `OpenMcpServerTabAsync(database)` open an MCP server tab (locked
+    to the selected database) for the connection profile remembered at Connect;
+    `EditDatabaseMetadata` opens the metadata dialog; `StopAllMcpServersAsync` runs
     when the window closes. Disconnect leaves MCP servers running. Tab commands: `NewQuery`, `OpenFile`,
     `SaveFile`, `SaveFileAs` (both take an optional tab, default the selected one),
     `CloseQuery`, `CloseOtherQueries` (both take any tab; only query tabs prompt to save). `OpenFiles(paths)` is also used by window
@@ -182,7 +186,7 @@ and `McpServerHostFactory`.
     (the last two bind to `MainViewModel.ShowLineNumbers` / `EditorFontSize`, which
     are re-raised when Options are saved).
   - `McpServerTabView` — MCP server details, client setup and activity grid.
-  - `ConnectionDialog`, `OptionsDialog`, `InputDialog`.
+  - `ConnectionDialog`, `OptionsDialog`, `MetadataDialog`, `InputDialog`.
 - **Controls** — `ResultGridsPanel` lays out the result grids: they fill the visible
   results area (one grid = whole pane, several share it equally), with a minimum
   height per grid, beyond which the panel grows and the surrounding `ScrollViewer`

@@ -128,13 +128,31 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public async Task ExecuteQuery_UsesDatabaseArgument()
+        public async Task ExecuteQuery_RejectsForeignDatabaseArgument()
         {
             McpDatabaseTools tools = CreateTools("Sales");
 
-            await tools.ExecuteQueryAsync("SELECT 1", "HR");
+            CallToolResult result = await tools.ExecuteQueryAsync("SELECT 1", "HR");
 
-            Assert.Equal("HR", sqlService.ExecutedBatches[0].Database);
+            Assert.True(result.IsError);
+            Assert.Contains("locked", GetText(result));
+            Assert.Contains("HR", GetText(result));
+            Assert.Empty(sqlService.ExecutedBatches);
+            Assert.Empty(sqlService.ReadOnlyBatches);
+            Assert.Equal("Blocked (locked database)", Assert.Single(calls).Outcome);
+        }
+
+        [Fact]
+        public async Task ExecuteQuery_AllowsTheLockedDatabaseArgument()
+        {
+            accessMode = McpAccessMode.ReadWrite;
+            McpDatabaseTools tools = CreateTools("Sales");
+
+            // The locked database's own name (any case) is accepted.
+            CallToolResult result = await tools.ExecuteQueryAsync("SELECT 1", "sales");
+
+            Assert.NotEqual(true, result.IsError);
+            Assert.Equal("Sales", Assert.Single(sqlService.ExecutedBatches).Database);
         }
 
         [Fact]
@@ -204,15 +222,15 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public async Task ListDatabases_ReturnsTheServerDatabases()
+        public async Task ListDatabases_ReturnsOnlyTheLockedDatabase()
         {
-            McpDatabaseTools tools = CreateTools(null);
+            McpDatabaseTools tools = CreateTools("Sales");
 
             CallToolResult result = await tools.ListDatabasesAsync();
 
             JsonArray names = JsonNode.Parse(GetText(result))!.AsArray();
-            Assert.Equal(new[] { "master", "Sales", "HR" }, names.Select(name => name!.GetValue<string>()));
-            Assert.Equal("3 database(s)", calls[0].Outcome);
+            Assert.Equal(new[] { "Sales" }, names.Select(name => name!.GetValue<string>()));
+            Assert.Equal("1 database(s)", calls[0].Outcome);
         }
 
         [Fact]
@@ -227,6 +245,18 @@ namespace LightSQL.Tests
             Assert.Equal("Sales", root["database"]!.GetValue<string>());
             Assert.Equal("Orders", root["objects"]![0]!["name"]!.GetValue<string>());
             Assert.Equal("1 table(s), 0 view(s)", calls[0].Outcome);
+        }
+
+        [Fact]
+        public async Task ListTables_RejectsForeignDatabaseArgument()
+        {
+            McpDatabaseTools tools = CreateTools("Sales");
+
+            CallToolResult result = await tools.ListTablesAsync("HR");
+
+            Assert.True(result.IsError);
+            Assert.Contains("locked", GetText(result));
+            Assert.Equal("Blocked (locked database)", Assert.Single(calls).Outcome);
         }
 
         [Fact]

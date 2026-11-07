@@ -76,5 +76,14 @@ namespace LightSQL.Services
         /// </summary>
         /// <returns>True if the user saved changes.</returns>
         bool ShowOptionsDialog();
+
+        /// <summary>
+        /// Shows the Database Metadata dialog, prefilled for a connection + database, so
+        /// the user can paste the JSON metadata sent to AI clients by an MCP server.
+        /// </summary>
+        /// <param name="connectionName">The connection to prefill, or null.</param>
+        /// <param name="database">The database to prefill, or null.</param>
+        /// <returns>True if the user saved the metadata.</returns>
+        bool ShowMetadataDialog(string? connectionName, string? database);
     }
 }

@@ -28,7 +28,7 @@ a common engine abstraction, so the same UI works across all three.
 - **Object Explorer.** A lazy tree — server → Databases → *database* → Tables /
   Views → *object* → columns — each level loaded on expand, with per-type icons.
   Right-click actions: New Query, Select Top 1000, New Database, Drop (with
-  confirmation), Start MCP Server, Refresh.
+  confirmation), Start MCP Server (database nodes only), Refresh.
 - **Active database per tab.** The toolbar **Database** dropdown selects the database
   for the selected tab; each tab remembers its own. `USE` inside a query switches
   that tab's database, like SSMS.
@@ -41,10 +41,12 @@ a common engine abstraction, so the same UI works across all three.
   encoding it was opened with; new files are UTF-8 with BOM, like SSMS).
 - **Theming.** Five themes — Auto (follow Windows), Light, Dark, Classic (Windows
   Forms gray), and Gradient — chosen in **Tools → Options**, with live preview.
-- **MCP server for AI clients.** Expose a connection as a Model Context Protocol
-  server so AI clients (Claude Code, Claude Desktop, Codex, …) can list databases,
-  tables and columns and run SQL from a chat. **Read-only by default**; opt-in
-  read-write per server. See [MCP server](#mcp-server-for-ai-clients) below.
+- **MCP server for AI clients.** Expose a single database as a Model Context Protocol
+  server — **locked to that database** — so AI clients (Claude Code, Claude Desktop,
+  Codex, …) can list its tables and columns and run SQL from a chat. **Read-only by
+  default**; opt-in write-access per server. You can also paste schema/semantic metadata
+  (JSON) that is sent to the AI as extra instructions. See
+  [MCP server](#mcp-server-for-ai-clients) below.
 
 For full details see the [`docs/`](docs/) folder — in particular
 [features.md](docs/features.md), [architecture.md](docs/architecture.md) and
@@ -130,15 +132,16 @@ LightSQL is designed so a **plaintext password is never written to disk**:
 
 ## MCP server for AI clients
 
-**Database → Start MCP Server** (or the toolbar button, or the Object Explorer
-context menu) exposes the current connection as an **MCP** (Model Context Protocol)
-server in its own tab, so AI clients can explore the database and run SQL from a
+The **Start MCP** toolbar button (next to the database dropdown), **Database → Start
+MCP Server**, or a **database node's** Object Explorer context menu exposes the selected
+database as an **MCP** (Model Context Protocol) server in its own tab — **locked to that
+one database** — so AI clients can explore it and run SQL from a
 chat.
 
 - Listens on **127.0.0.1 only**, on the first free port from **9000** up; several
   servers can run at once. Endpoint: `http://127.0.0.1:<port>/mcp` (Streamable HTTP).
 - **Read-only by default** — data-changing statements are rejected and every batch
-  runs in a rolled-back transaction. A per-server **Allow read-write** checkbox
+  runs in a rolled-back transaction. A per-server **Allow write-access** checkbox
   (with confirmation) lets the AI change data.
 - Requests with a non-loopback `Host`/`Origin` are rejected (403), blocking browser
   pages. There is **no auth token**, so any program on the machine can call a running

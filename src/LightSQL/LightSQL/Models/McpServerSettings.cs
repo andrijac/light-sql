@@ -18,8 +18,15 @@ namespace LightSQL.Models
         public string? DefaultDatabase { get; init; }
 
         /// <summary>
+        /// Extra, user-provided metadata (a JSON document describing the database's
+        /// schema and semantics) appended to the server's instructions for AI clients,
+        /// or null when none was saved for this connection and database.
+        /// </summary>
+        public string? MetadataInstructions { get; init; }
+
+        /// <summary>
         /// Returns the current access mode. Called on every query, so the user can
-        /// switch between read-only and read-write while the server runs. Defaults
+        /// switch between read-only and write-access while the server runs. Defaults
         /// to read-only.
         /// </summary>
         public Func<McpAccessMode> GetAccessMode { get; init; } = () => McpAccessMode.ReadOnly;

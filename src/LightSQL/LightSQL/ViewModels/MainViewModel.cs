@@ -24,6 +24,7 @@ namespace LightSQL.ViewModels
         private readonly IDialogService dialogService;
         private readonly IMcpServerHostFactory mcpHostFactory;
         private readonly IClipboardService clipboardService;
+        private readonly IMetadataStore metadataStore;
 
         /// <summary>
         /// The connection used by the last successful Connect; MCP servers are
@@ -54,6 +55,7 @@ namespace LightSQL.ViewModels
         [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
         [NotifyCanExecuteChangedFor(nameof(SaveFileCommand))]
         [NotifyCanExecuteChangedFor(nameof(SaveFileAsCommand))]
+        [NotifyCanExecuteChangedFor(nameof(StartMcpServerCommand))]
         [NotifyPropertyChangedFor(nameof(SelectedQueryTab))]
         [NotifyPropertyChangedFor(nameof(IsQueryTabSelected))]
         private DocumentTabViewModel? selectedTab;
@@ -80,6 +82,7 @@ namespace LightSQL.ViewModels
         /// <param name="objectExplorer">The Object Explorer view model.</param>
         /// <param name="mcpHostFactory">Starts MCP servers for the connection.</param>
         /// <param name="clipboardService">Clipboard access for the MCP tabs.</param>
+        /// <param name="metadataStore">Database metadata sent to AI clients by MCP servers.</param>
         public MainViewModel(
             ISqlConnectionService sqlService,
             ISqlStatementAnalyzer statementAnalyzer,
@@ -88,7 +91,8 @@ namespace LightSQL.ViewModels
             IDialogService dialogService,
             ObjectExplorerViewModel objectExplorer,
             IMcpServerHostFactory mcpHostFactory,
-            IClipboardService clipboardService)
+            IClipboardService clipboardService,
+            IMetadataStore metadataStore)
         {
             this.sqlService = sqlService;
             this.statementAnalyzer = statementAnalyzer;
@@ -97,6 +101,7 @@ namespace LightSQL.ViewModels
             this.dialogService = dialogService;
             this.mcpHostFactory = mcpHostFactory;
             this.clipboardService = clipboardService;
+            this.metadataStore = metadataStore;
 
             ObjectExplorer = objectExplorer;
             ObjectExplorer.MainActions = this;
@@ -230,6 +235,7 @@ namespace LightSQL.ViewModels
                 mcpHostFactory,
                 clipboardService,
                 dialogService,
+                metadataStore,
                 connectedProfile,
                 sqlService.ServerName ?? connectedProfile.Server,
                 database);
@@ -428,16 +434,26 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Starts an MCP server for the current connection in a new tab, using the
-        /// selected query tab's database as the server's default database.
+        /// Starts an MCP server for the current connection in a new tab, locked to the
+        /// database selected in the toolbar dropdown (the selected query tab's database).
         /// </summary>
         /// <returns>A task that completes when the server is running or has failed.</returns>
-        [RelayCommand(CanExecute = nameof(CanDisconnect))]
+        [RelayCommand(CanExecute = nameof(CanStartMcpServer))]
         private Task StartMcpServerAsync()
         {
             string? database = SelectedQueryTab?.ActiveDatabase ?? sqlService.CurrentDatabase;
 
             return OpenMcpServerTabAsync(database);
+        }
+
+        /// <summary>
+        /// Whether an MCP server can be started now: connected, with a database selected
+        /// in the toolbar dropdown. Each server is locked to that single database.
+        /// </summary>
+        /// <returns>True when connected and a database is selected.</returns>
+        private bool CanStartMcpServer()
+        {
+            return IsConnected == true && string.IsNullOrWhiteSpace(SelectedQueryTab?.ActiveDatabase) == false;
         }
 
         /// <summary>
@@ -555,6 +571,22 @@ namespace LightSQL.ViewModels
             }
 
             SelectedTab = keep;
+        }
+
+        /// <summary>
+        /// Opens the Database Metadata dialog for the current connection and selected
+        /// database, so the user can paste the JSON sent to AI clients by an MCP server
+        /// locked to that database.
+        /// </summary>
+        [RelayCommand]
+        private void EditDatabaseMetadata()
+        {
+            bool saved = dialogService.ShowMetadataDialog(connectedProfile?.Name, SelectedQueryTab?.ActiveDatabase);
+
+            if (saved == true)
+            {
+                StatusMessage = "Database metadata saved";
+            }
         }
 
         /// <summary>
@@ -876,6 +908,9 @@ namespace LightSQL.ViewModels
 
             if (e.PropertyName == nameof(QueryTabViewModel.ActiveDatabase) && sender is QueryTabViewModel tab)
             {
+                // The selected tab's database drives whether "Start MCP" is enabled.
+                StartMcpServerCommand.NotifyCanExecuteChanged();
+
                 string? listed = EnsureDatabaseListed(tab.ActiveDatabase);
 
                 // The dropdown matches names exactly, so use the listed spelling

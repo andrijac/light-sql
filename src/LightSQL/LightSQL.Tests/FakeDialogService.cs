@@ -130,5 +130,35 @@ namespace LightSQL.Tests
         {
             return false;
         }
+
+        /// <summary>
+        /// The result returned by <see cref="ShowMetadataDialog"/>.
+        /// </summary>
+        public bool MetadataDialogResult { get; set; }
+
+        /// <summary>
+        /// How many times <see cref="ShowMetadataDialog"/> was called.
+        /// </summary>
+        public int MetadataDialogCount { get; private set; }
+
+        /// <summary>
+        /// The connection name passed to the last <see cref="ShowMetadataDialog"/> call.
+        /// </summary>
+        public string? MetadataDialogConnectionName { get; private set; }
+
+        /// <summary>
+        /// The database passed to the last <see cref="ShowMetadataDialog"/> call.
+        /// </summary>
+        public string? MetadataDialogDatabase { get; private set; }
+
+        /// <inheritdoc />
+        public bool ShowMetadataDialog(string? connectionName, string? database)
+        {
+            MetadataDialogCount++;
+            MetadataDialogConnectionName = connectionName;
+            MetadataDialogDatabase = database;
+
+            return MetadataDialogResult;
+        }
     }
 }

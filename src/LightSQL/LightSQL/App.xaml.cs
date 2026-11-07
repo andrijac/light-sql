@@ -72,6 +72,7 @@ namespace LightSQL
             // PostgreSQL, MySQL) for a connection; stateless, so a single instance is shared.
             services.AddSingleton<IDatabaseProviderRegistry, DatabaseProviderRegistry>();
             services.AddSingleton<IConnectionStore, ConnectionStore>();
+            services.AddSingleton<IMetadataStore, MetadataStore>();
             services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<ISqlConnectionService, SqlConnectionService>();
             services.AddSingleton<ISqlStatementAnalyzer, SqlStatementAnalyzer>();
@@ -95,6 +96,7 @@ namespace LightSQL
             // Dialog view models (a fresh instance each time a dialog is shown).
             services.AddTransient<ConnectionDialogViewModel>();
             services.AddTransient<OptionsViewModel>();
+            services.AddTransient<MetadataDialogViewModel>();
 
             // Windows.
             services.AddSingleton<MainWindow>();

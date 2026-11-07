@@ -12,10 +12,14 @@ namespace LightSQL.Services.Mcp
     /// and execute SQL against the connected engine (SQL Server, PostgreSQL or MySQL).
     /// Every call is reported through a callback so the server tab can show what the AI did.
     /// <para>
+    /// The server is locked to a single database (its default). A tool call that names
+    /// another database is rejected, and <c>list_databases</c> returns only that database.
+    /// </para>
+    /// <para>
     /// In read-only mode (the default) execute_query first rejects batches that
     /// could change anything (<see cref="ISqlStatementAnalyzer.FindWriteOperation"/>)
     /// and then runs the rest in a transaction that is always rolled back, so a
-    /// change the check missed is still undone. Read-write mode runs batches as is.
+    /// change the check missed is still undone. Write-access runs batches as is.
     /// </para>
     /// </summary>
     [McpServerToolType]
@@ -64,6 +68,18 @@ namespace LightSQL.Services.Mcp
         }
 
         /// <summary>
+        /// The single database this server is locked to. Every tool operates only on
+        /// this database; a tool call naming any other database is rejected.
+        /// </summary>
+        private string LockedDatabase
+        {
+            get
+            {
+                return DefaultDatabase ?? sqlService.AdministrativeDatabase ?? string.Empty;
+            }
+        }
+
+        /// <summary>
         /// Splits a table reference into schema and name. Accepts "Orders",
         /// "dbo.Orders" and bracketed forms such as "[dbo].[Order Details]"; an
         /// explicit schema argument wins over one in the name.
@@ -98,14 +114,18 @@ namespace LightSQL.Services.Mcp
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
         /// <returns>The database names as a JSON array.</returns>
         [McpServerTool(Name = "list_databases", Title = "List databases", ReadOnly = true, OpenWorld = false)]
-        [Description("Lists the databases (schemas, for MySQL) on the connected database server.")]
+        [Description("Lists the database this server is locked to (a single-item list).")]
         public Task<CallToolResult> ListDatabasesAsync(CancellationToken cancellationToken = default)
         {
-            return RunAsync("list_databases", string.Empty, null, async () =>
+            return RunAsync("list_databases", string.Empty, null, () =>
             {
-                IReadOnlyList<string> databases = await sqlService.GetDatabasesAsync(cancellationToken);
+                string locked = LockedDatabase;
 
-                return (McpResultFormatter.FormatNames(databases), true, $"{databases.Count} database(s)");
+                IReadOnlyList<string> databases = string.IsNullOrEmpty(locked) == true
+                    ? Array.Empty<string>()
+                    : new[] { locked };
+
+                return Task.FromResult((McpResultFormatter.FormatNames(databases), true, $"{databases.Count} database(s)"));
             });
         }
 
@@ -118,13 +138,20 @@ namespace LightSQL.Services.Mcp
         [McpServerTool(Name = "list_tables", Title = "List tables and views", ReadOnly = true, OpenWorld = false)]
         [Description("Lists the tables and views (schema, name, type) of a database.")]
         public Task<CallToolResult> ListTablesAsync(
-            [Description("Database to inspect. Omit to use the server's default database.")] string? database = null,
+            [Description("Omit this. The server is locked to a single database; naming another one is rejected.")] string? database = null,
             CancellationToken cancellationToken = default)
         {
-            string target = ResolveDatabase(database);
+            string target = LockedDatabase;
 
             return RunAsync("list_tables", target, target, async () =>
             {
+                string? violation = GetLockViolation(database);
+
+                if (violation is not null)
+                {
+                    return (violation, false, "Blocked (locked database)");
+                }
+
                 IReadOnlyList<SchemaObject> tables = await sqlService.GetTablesAsync(target, cancellationToken);
                 IReadOnlyList<SchemaObject> views = await sqlService.GetViewsAsync(target, cancellationToken);
 
@@ -147,10 +174,10 @@ namespace LightSQL.Services.Mcp
         public Task<CallToolResult> DescribeTableAsync(
             [Description("Table or view name, e.g. 'Orders' or 'sales.Orders'.")] string table,
             [Description("Schema name. Omit to use the schema in 'table', or the engine default (dbo / public; ignored by MySQL).")] string? schema = null,
-            [Description("Database that owns the table. Omit to use the server's default database.")] string? database = null,
+            [Description("Omit this. The server is locked to a single database; naming another one is rejected.")] string? database = null,
             CancellationToken cancellationToken = default)
         {
-            string target = ResolveDatabase(database);
+            string target = LockedDatabase;
             (string Schema, string Name) objectName = ParseObjectName(table, schema, sqlService.Dialect?.DefaultSchema);
             string qualified = string.IsNullOrEmpty(objectName.Schema) == true
                 ? objectName.Name
@@ -158,6 +185,13 @@ namespace LightSQL.Services.Mcp
 
             return RunAsync("describe_table", qualified, target, async () =>
             {
+                string? violation = GetLockViolation(database);
+
+                if (violation is not null)
+                {
+                    return (violation, false, "Blocked (locked database)");
+                }
+
                 IReadOnlyList<ColumnInfo> columns = await sqlService.GetColumnsAsync(target, objectName.Schema, objectName.Name, cancellationToken);
 
                 if (columns.Count == 0)
@@ -182,21 +216,28 @@ namespace LightSQL.Services.Mcp
         [McpServerTool(Name = "execute_query", Title = "Execute SQL", ReadOnly = false, Destructive = true, OpenWorld = false)]
         [Description("Executes a SQL batch on the connected database server (SQL Server, PostgreSQL or MySQL) and "
             + "returns every result set (columns, rows), the messages and the number of rows affected. Use the SQL "
-            + "dialect of that engine. The server is read-only unless the user enabled read-write in LightSQL: then "
+            + "dialect of that engine. The server is read-only unless the user granted write-access in LightSQL: then "
             + "only queries that read data are accepted (no INSERT/UPDATE/DELETE, DDL, EXEC/CALL or SELECT INTO) "
             + "and the batch is rolled back. "
             + "Each call runs on its own connection: temporary tables, session settings and USE do not carry over to the next call.")]
         public Task<CallToolResult> ExecuteQueryAsync(
             [Description("The SQL batch to execute, in the connected engine's dialect (no GO separators).")] string sql,
-            [Description("Database to run in. Omit to use the server's default database.")] string? database = null,
+            [Description("Omit this. The server is locked to a single database; naming another one is rejected.")] string? database = null,
             [Description("Maximum rows returned per result set (default 200, at most 5000).")] int maxRows = McpResultFormatter.DefaultMaxRows,
             CancellationToken cancellationToken = default)
         {
-            string target = ResolveDatabase(database);
+            string target = LockedDatabase;
             int limit = McpResultFormatter.ClampMaxRows(maxRows);
 
             return RunAsync("execute_query", sql, target, async () =>
             {
+                string? violation = GetLockViolation(database);
+
+                if (violation is not null)
+                {
+                    return (violation, false, "Blocked (locked database)");
+                }
+
                 if (string.IsNullOrWhiteSpace(sql) == true)
                 {
                     return ("The 'sql' argument is empty.", false, "Empty query");
@@ -212,7 +253,7 @@ namespace LightSQL.Services.Mcp
                     {
                         string message = $"Rejected: this MCP server is read-only and the batch contains {writeOperation}. "
                             + "Only queries that read data are allowed (SELECT / WITH, variables, control flow). "
-                            + "The user can switch the server to read-write in LightSQL if changes are intended.";
+                            + "The user can grant write-access in LightSQL if changes are intended.";
 
                         return (message, false, $"Blocked (read-only): {writeOperation}");
                     }
@@ -310,19 +351,28 @@ namespace LightSQL.Services.Mcp
         }
 
         /// <summary>
-        /// Picks the database for a call: the one named, else the server default.
+        /// Checks a tool call's requested database against the one this server is
+        /// locked to. The server only serves a single database, so a call that names
+        /// a different one is refused.
         /// </summary>
-        /// <param name="database">The database named by the call, or null.</param>
-        /// <returns>The database to use.</returns>
-        private string ResolveDatabase(string? database)
+        /// <param name="requested">The database named by the call, or null/empty for the locked one.</param>
+        /// <returns>An error message when another database was requested, or null when the call is allowed.</returns>
+        private string? GetLockViolation(string? requested)
         {
-            if (string.IsNullOrWhiteSpace(database) == false)
+            if (string.IsNullOrWhiteSpace(requested) == true)
             {
-                return database.Trim();
+                return null;
             }
 
-            // The connection's default, else the engine's administrative database.
-            return DefaultDatabase ?? sqlService.AdministrativeDatabase ?? string.Empty;
+            string locked = LockedDatabase;
+
+            if (string.Equals(requested.Trim(), locked, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return null;
+            }
+
+            return $"Rejected: this MCP server is locked to database '{locked}' and cannot access '{requested.Trim()}'. "
+                + "Omit the 'database' argument, or set it to the server's database.";
         }
 
         /// <summary>

@@ -20,6 +20,7 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
         <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibility" />
         <converters:ObjectExplorerIconConverter x:Key="ObjectExplorerIcon" />
+        <converters:DatabaseObjectTypeToVisibilityConverter x:Key="DatabaseObjectTypeToVisibility" />
     </Window.Resources>
 
     <Window.InputBindings>
@@ -72,7 +73,10 @@
                 <Separator />
                 <MenuItem Header="Start _MCP Server"
                           Command="{Binding StartMcpServerCommand}"
-                          ToolTip="Start an MCP server for this connection so AI clients (Claude, Codex) can query it" />
+                          ToolTip="Start an MCP server locked to the selected database so AI clients (Claude, Codex) can query it" />
+                <MenuItem Header="Database _Metadata..."
+                          Command="{Binding EditDatabaseMetadataCommand}"
+                          ToolTip="Paste schema/semantic metadata (JSON) for a database; it is sent to AI clients as extra instructions" />
             </MenuItem>
 
             <MenuItem Header="_Tools">
@@ -96,6 +100,10 @@
                           SelectedItem="{Binding SelectedQueryTab.ActiveDatabase}"
                           IsEnabled="{Binding IsConnected}"
                           ToolTip="Database of the current query tab" />
+                <Button Content="Start MCP"
+                        Command="{Binding StartMcpServerCommand}"
+                        Margin="4,0,0,0"
+                        ToolTip="Start an MCP server locked to the selected database (AI clients such as Claude or Codex can then query it)" />
                 <Separator />
                 <Button Content="Execute (F5)"
                         Command="{Binding ExecuteQueryCommand}"
@@ -112,10 +120,6 @@
                 <Button Content="Save"
                         Command="{Binding SaveFileCommand}"
                         ToolTip="Save the query to its file (Ctrl+S)" />
-                <Separator />
-                <Button Content="MCP Server"
-                        Command="{Binding StartMcpServerCommand}"
-                        ToolTip="Start an MCP server for this connection (AI clients such as Claude or Codex can then query it)" />
             </ToolBar>
         </ToolBarTray>
 
@@ -217,11 +221,12 @@
                                     <MenuItem Header="Drop..."
                                               Command="{Binding DropCommand}"
                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                    <Separator />
+                                    <Separator Visibility="{Binding PlacementTarget.DataContext.ObjectType, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource DatabaseObjectTypeToVisibility}, ConverterParameter=Database}" />
                                     <MenuItem Header="Start MCP Server"
-                                              ToolTip="Start an MCP server with this database as its default"
+                                              ToolTip="Start an MCP server locked to this database"
                                               Command="{Binding StartMcpServerCommand}"
-                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Visibility="{Binding PlacementTarget.DataContext.ObjectType, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource DatabaseObjectTypeToVisibility}, ConverterParameter=Database}" />
                                     <Separator />
                                     <MenuItem Header="Refresh"
                                               Command="{Binding RefreshCommand}"

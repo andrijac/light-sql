@@ -6,6 +6,7 @@
 |---|---|
 | Application options | `%APPDATA%\LightSQL\options.json` |
 | Saved connections | `%APPDATA%\LightSQL\connections.json` |
+| Database metadata (for MCP) | `%APPDATA%\LightSQL\metadata.json` |
 | Query scripts | Wherever you save them — ordinary `.sql` files chosen with **File → Save As** |
 
 Query files are plain text: don't put passwords or connection strings with
@@ -63,11 +64,17 @@ LightSQL is designed so a **plaintext password is never written to disk**:
 An MCP server started from LightSQL ([mcp-server.md](mcp-server.md)) signs in
 with the connection's credentials (kept in memory only, never shown or returned)
 and listens on 127.0.0.1 only; requests from other sites' web pages are rejected.
-It is **read-only by default** (data-changing statements are rejected and every
-batch is rolled back) until the user allows read-write in its tab. Any program on
-this computer can call it while it runs, and query results are sent to the AI
-client's model provider. Use a login with the least permissions needed, and stop
-servers you no longer use.
+Each server is **locked to a single database** and cannot reach any other database on
+the connection. It is **read-only by default** (data-changing statements are rejected
+and every batch is rolled back) until the user grants write-access in its tab. Any program
+on this computer can call it while it runs, and query results are sent to the AI client's
+model provider. Use a login with the least permissions needed, and stop servers you no
+longer use.
+
+**Database metadata** pasted via **Database → Database Metadata…** is saved in
+`metadata.json` and sent to the AI client as part of the server's instructions, so it must
+not contain passwords, tokens or connection strings. The file holds only what you paste;
+LightSQL never writes credentials into it.
 
 ## Recommendations
 

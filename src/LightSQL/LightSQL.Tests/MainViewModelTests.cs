@@ -642,7 +642,8 @@ namespace LightSQL.Tests
                 dialogService,
                 objectExplorer,
                 mcpHostFactory,
-                clipboardService);
+                clipboardService,
+                new FakeMetadataStore());
         }
 
         /// <summary>

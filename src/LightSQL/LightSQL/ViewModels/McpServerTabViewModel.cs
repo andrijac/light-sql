@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
@@ -12,7 +13,7 @@ namespace LightSQL.ViewModels
     /// AI clients such as Claude Code or Codex can explore the database and run
     /// queries from a chat. Shows which connection and database the server uses,
     /// its port and endpoint, ready-to-copy client setup, and a log of every tool
-    /// call. The server starts read-only; the user can allow read-write access
+    /// call. The server starts read-only; the user can grant write-access
     /// (after a confirmation) and switch back at any time, even while it runs.
     /// Closing the tab stops the server.
     /// </summary>
@@ -21,6 +22,7 @@ namespace LightSQL.ViewModels
         private readonly IMcpServerHostFactory hostFactory;
         private readonly IClipboardService clipboardService;
         private readonly IDialogService dialogService;
+        private readonly IMetadataStore metadataStore;
         private readonly ConnectionProfile profile;
 
         /// <summary>
@@ -97,7 +99,7 @@ namespace LightSQL.ViewModels
         /// <summary>
         /// Prefix of the server name suggested for AI client configuration.
         /// </summary>
-        private const string ClientNamePrefix = "lightsql";
+        private const string ClientNamePrefix = "LightSQL";
 
         /// <summary>
         /// Creates the tab. Call <see cref="StartAsync"/> to start the server.
@@ -105,13 +107,15 @@ namespace LightSQL.ViewModels
         /// <param name="hostFactory">Starts the MCP server.</param>
         /// <param name="clipboardService">Copies the client setup to the clipboard.</param>
         /// <param name="dialogService">Asks for confirmation before allowing writes.</param>
+        /// <param name="metadataStore">Supplies the database metadata sent to AI clients.</param>
         /// <param name="profile">The connection the server uses (a copy is kept).</param>
         /// <param name="serverName">The SQL Server instance name shown in the tab.</param>
-        /// <param name="defaultDatabase">The database used when a tool call names none; null for the connection's default.</param>
+        /// <param name="defaultDatabase">The single database this server is locked to; null for the connection's default.</param>
         public McpServerTabViewModel(
             IMcpServerHostFactory hostFactory,
             IClipboardService clipboardService,
             IDialogService dialogService,
+            IMetadataStore metadataStore,
             ConnectionProfile profile,
             string serverName,
             string? defaultDatabase)
@@ -119,6 +123,7 @@ namespace LightSQL.ViewModels
             this.hostFactory = hostFactory;
             this.clipboardService = clipboardService;
             this.dialogService = dialogService;
+            this.metadataStore = metadataStore;
             this.profile = profile.Clone();
 
             uiContext = SynchronizationContext.Current;
@@ -178,7 +183,7 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Whether AI clients may change data (bound to the "Allow read-write" check
+        /// Whether AI clients may change data (bound to the "Allow write-access" check
         /// box). Turning it on asks for confirmation first; when the user declines,
         /// the server stays read-only and the check box is reset. Takes effect from
         /// the next query, without restarting the server.
@@ -201,9 +206,9 @@ namespace LightSQL.ViewModels
                 {
                     bool confirmed = dialogService.Confirm(
                         $"Allow AI clients of the MCP server for {ServerName} to change data?\n\n"
-                        + "In read-write mode they can run INSERT, UPDATE, DELETE, DDL and stored procedures "
+                        + "With write-access they can run INSERT, UPDATE, DELETE, DDL and stored procedures "
                         + "with the permissions of this connection's login.",
-                        "Allow Read-Write Access");
+                        "Allow Write-Access");
 
                     if (confirmed == false)
                     {
@@ -231,7 +236,7 @@ namespace LightSQL.ViewModels
             get
             {
                 return IsReadWrite == true
-                    ? "Read-write: AI clients can change data"
+                    ? "Write-access: AI clients can change data"
                     : "Read-only: only reading queries, every batch rolled back";
             }
         }
@@ -285,13 +290,23 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// The name suggested for this server in an AI client's configuration,
-        /// e.g. "lightsql-9000".
+        /// The name suggested for this server in an AI client's configuration, based on
+        /// the server's database, e.g. "LightSQL-Sales". The database name is sanitized to
+        /// a valid client/TOML key; with no database it falls back to the port.
         /// </summary>
         public string ClientName
         {
             get
             {
+                string sanitized = string.IsNullOrWhiteSpace(DefaultDatabase) == true
+                    ? string.Empty
+                    : SanitizeName(DefaultDatabase);
+
+                if (sanitized.Length > 0)
+                {
+                    return $"{ClientNamePrefix}-{sanitized}";
+                }
+
                 return Port is null ? ClientNamePrefix : $"{ClientNamePrefix}-{Port}";
             }
         }
@@ -337,7 +352,7 @@ namespace LightSQL.ViewModels
                 // Make write access visible on the tab itself.
                 if (IsReadWrite == true)
                 {
-                    name += " [read-write]";
+                    name += " [write-access]";
                 }
 
                 if (State == McpServerState.Stopped)
@@ -364,6 +379,44 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Reduces a database name to a safe client/TOML key: ASCII letters, digits and
+        /// underscores are kept, every other run of characters becomes a single hyphen,
+        /// and leading/trailing hyphens are dropped (e.g. "Order Details" → "Order-Details").
+        /// </summary>
+        /// <param name="name">The database name.</param>
+        /// <returns>The sanitized name, which may be empty.</returns>
+        private static string SanitizeName(string name)
+        {
+            StringBuilder builder = new();
+            bool pendingSeparator = false;
+
+            foreach (char character in name.Trim())
+            {
+                bool isAllowed = (character >= 'a' && character <= 'z')
+                    || (character >= 'A' && character <= 'Z')
+                    || (character >= '0' && character <= '9')
+                    || character == '_';
+
+                if (isAllowed == false)
+                {
+                    pendingSeparator = true;
+
+                    continue;
+                }
+
+                if (pendingSeparator == true && builder.Length > 0)
+                {
+                    builder.Append('-');
+                }
+
+                builder.Append(character);
+                pendingSeparator = false;
+            }
+
+            return builder.ToString();
+        }
+
+        /// <summary>
         /// Connects and starts the MCP server on a free port from 9000 up. Failures
         /// are shown in the tab rather than thrown.
         /// </summary>
@@ -379,10 +432,14 @@ namespace LightSQL.ViewModels
             ErrorMessage = null;
             startCancellation = new CancellationTokenSource();
 
+            // Read on every start, so editing the metadata and restarting applies it.
+            ConnectionMetadata? metadata = metadataStore.Get(profile.Name, DefaultDatabase);
+
             McpServerSettings settings = new()
             {
                 Profile = profile,
                 DefaultDatabase = DefaultDatabase,
+                MetadataInstructions = metadata?.Json,
                 GetAccessMode = () => accessMode,
                 ToolCalled = OnToolCalled
             };

@@ -169,23 +169,21 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Starts an MCP server for the connection in a new tab. On a database (or
-        /// anything inside one) that database becomes the server's default; on the
-        /// server node the connection's default database is used.
+        /// Starts an MCP server locked to a single database, in a new tab. Only a
+        /// database node starts one (the menu item is hidden on every other node), and
+        /// that database becomes the server's single database.
         /// </summary>
-        /// <param name="node">The invoking node.</param>
+        /// <param name="node">The invoking database node.</param>
         /// <returns>A task that completes when the server is running or has failed.</returns>
         [RelayCommand]
         private async Task StartMcpServerAsync(TreeNodeViewModel? node)
         {
-            if (MainActions is null)
+            if (MainActions is null || node is null || node.ObjectType != DatabaseObjectType.Database)
             {
                 return;
             }
 
-            string? database = node is null || string.IsNullOrWhiteSpace(node.DatabaseName) == true ? null : node.DatabaseName;
-
-            await MainActions.OpenMcpServerTabAsync(database);
+            await MainActions.OpenMcpServerTabAsync(node.DatabaseName);
         }
 
         /// <summary>

@@ -14,11 +14,30 @@ namespace LightSQL.Tests
         private readonly FakeSqlConnectionService sqlService = new();
         private readonly FakeDialogService dialogService = new();
         private readonly FakeMcpServerHostFactory mcpHostFactory = new();
+        private readonly FakeMetadataStore metadataStore = new();
 
         [Fact]
         public void StartMcpServer_IsDisabled_WhenNotConnected()
         {
             MainViewModel viewModel = CreateViewModel();
+
+            Assert.False(viewModel.StartMcpServerCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task StartMcpServer_IsEnabled_WhenConnectedWithDatabaseSelected()
+        {
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+            viewModel.SelectedQueryTab!.ActiveDatabase = "Sales";
+
+            Assert.True(viewModel.StartMcpServerCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task StartMcpServer_IsDisabled_WhenNoDatabaseSelected()
+        {
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+            viewModel.SelectedQueryTab!.ActiveDatabase = null;
 
             Assert.False(viewModel.StartMcpServerCommand.CanExecute(null));
         }
@@ -143,14 +162,29 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public async Task ObjectExplorer_ServerNode_UsesConnectionDefault()
+        public async Task ObjectExplorer_ServerNode_DoesNotStartServer()
         {
             MainViewModel viewModel = await CreateConnectedViewModelAsync();
             TreeNodeViewModel serverNode = new("fake-server", DatabaseObjectType.Server);
 
+            // Starting an MCP server is only allowed on a database node now.
             await viewModel.ObjectExplorer.StartMcpServerCommand.ExecuteAsync(serverNode);
 
-            Assert.Null(viewModel.McpServerTabs.Single().DefaultDatabase);
+            Assert.Empty(viewModel.McpServerTabs);
+        }
+
+        [Fact]
+        public async Task EditDatabaseMetadata_OpensDialogForTheSelectedDatabase()
+        {
+            MainViewModel viewModel = await CreateConnectedViewModelAsync();
+            viewModel.SelectedQueryTab!.ActiveDatabase = "Sales";
+            dialogService.MetadataDialogResult = true;
+
+            viewModel.EditDatabaseMetadataCommand.Execute(null);
+
+            Assert.Equal(1, dialogService.MetadataDialogCount);
+            Assert.Equal("Sales", dialogService.MetadataDialogDatabase);
+            Assert.Equal("Database metadata saved", viewModel.StatusMessage);
         }
 
         [Fact]
@@ -190,7 +224,8 @@ namespace LightSQL.Tests
                 dialogService,
                 new ObjectExplorerViewModel(sqlService, dialogService),
                 mcpHostFactory,
-                new FakeClipboardService());
+                new FakeClipboardService(),
+                metadataStore);
         }
 
         /// <summary>

@@ -1,0 +1,68 @@
+<Window x:Class="LightSQL.Views.MetadataDialog"
+        Style="{DynamicResource Theme.WindowStyle}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Width="640"
+        Height="560"
+        Title="Database Metadata">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Connection the metadata belongs to. -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Connection" Width="90" VerticalAlignment="Center" />
+            <ComboBox Width="320"
+                      IsEditable="True"
+                      ItemsSource="{Binding Connections}"
+                      Text="{Binding ConnectionName, UpdateSourceTrigger=PropertyChanged}" />
+        </StackPanel>
+
+        <!-- Database the metadata describes. -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Database" Width="90" VerticalAlignment="Center" />
+            <TextBox Width="320" Text="{Binding Database, UpdateSourceTrigger=PropertyChanged}" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="2" Text="Metadata (JSON)" Margin="0,0,0,4" />
+
+        <!-- The pasted JSON document. Monospace, no wrapping, scrollable. -->
+        <TextBox Grid.Row="3"
+                 Text="{Binding Json, UpdateSourceTrigger=PropertyChanged}"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Auto"
+                 FontFamily="Consolas"
+                 TextWrapping="NoWrap" />
+
+        <TextBlock Grid.Row="4"
+                   Margin="0,8,0,0"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Theme.SecondaryForeground}"
+                   Text="This text is sent to AI clients as instructions. Do not include passwords, tokens, or connection strings. Leave it empty to remove the saved metadata." />
+
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Save"
+                    Width="90"
+                    Margin="0,0,8,0"
+                    IsDefault="True"
+                    Click="SaveButton_Click" />
+            <Button Content="Cancel"
+                    Width="90"
+                    IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

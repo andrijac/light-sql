@@ -13,6 +13,7 @@ namespace LightSQL.Tests
         private readonly FakeMcpServerHostFactory hostFactory = new();
         private readonly FakeClipboardService clipboardService = new();
         private readonly FakeDialogService dialogService = new();
+        private readonly FakeMetadataStore metadataStore = new();
 
         [Fact]
         public async Task Start_RunsServer_AndShowsPortAndEndpoint()
@@ -41,6 +42,27 @@ namespace LightSQL.Tests
             Assert.Equal("sql01", settings.Profile.Server);
             Assert.Equal("Sales", settings.DefaultDatabase);
             Assert.NotNull(settings.ToolCalled);
+        }
+
+        [Fact]
+        public async Task Start_PassesSavedMetadataInstructions()
+        {
+            metadataStore.Save(new ConnectionMetadata { ConnectionName = "conn1", Database = "Sales", Json = "{\"ok\":true}" });
+            McpServerTabViewModel tab = CreateTab("Sales");
+
+            await tab.StartAsync();
+
+            Assert.Equal("{\"ok\":true}", hostFactory.StartedSettings[0].MetadataInstructions);
+        }
+
+        [Fact]
+        public async Task Start_WithoutSavedMetadata_PassesNullInstructions()
+        {
+            McpServerTabViewModel tab = CreateTab("Sales");
+
+            await tab.StartAsync();
+
+            Assert.Null(hostFactory.StartedSettings[0].MetadataInstructions);
         }
 
         [Fact]
@@ -76,8 +98,8 @@ namespace LightSQL.Tests
             Assert.Equal(1, dialogService.ConfirmCount);
             Assert.True(tab.IsReadWrite);
             Assert.Equal(McpAccessMode.ReadWrite, hostFactory.StartedSettings[0].GetAccessMode());
-            Assert.Equal("MCP SQL01 :9000 [read-write]", tab.Header);
-            Assert.StartsWith("Read-write", tab.AccessText);
+            Assert.Equal("MCP SQL01 :9000 [write-access]", tab.Header);
+            Assert.StartsWith("Write-access", tab.AccessText);
         }
 
         [Fact]
@@ -106,7 +128,7 @@ namespace LightSQL.Tests
 
             Assert.Equal(1, dialogService.ConfirmCount);
             Assert.Equal(McpAccessMode.ReadOnly, tab.AccessMode);
-            Assert.DoesNotContain("read-write", tab.Header);
+            Assert.DoesNotContain("write-access", tab.Header);
         }
 
         [Fact]
@@ -158,14 +180,32 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public async Task ClientSetup_UsesEndpointAndPort()
+        public async Task ClientSetup_UsesDatabaseNameAndEndpoint()
+        {
+            McpServerTabViewModel tab = CreateTab("Sales");
+            await tab.StartAsync();
+
+            Assert.Equal("LightSQL-Sales", tab.ClientName);
+            Assert.Equal("claude mcp add --transport http LightSQL-Sales http://127.0.0.1:9000/mcp", tab.ClaudeCommand);
+            Assert.Equal($"[mcp_servers.LightSQL-Sales]{Environment.NewLine}url = \"http://127.0.0.1:9000/mcp\"", tab.CodexConfig);
+        }
+
+        [Fact]
+        public async Task ClientName_SanitizesTheDatabaseName()
+        {
+            McpServerTabViewModel tab = CreateTab("Order Details");
+            await tab.StartAsync();
+
+            Assert.Equal("LightSQL-Order-Details", tab.ClientName);
+        }
+
+        [Fact]
+        public async Task ClientName_FallsBackToPort_WhenNoDatabase()
         {
             McpServerTabViewModel tab = CreateTab(null);
             await tab.StartAsync();
 
-            Assert.Equal("lightsql-9000", tab.ClientName);
-            Assert.Equal("claude mcp add --transport http lightsql-9000 http://127.0.0.1:9000/mcp", tab.ClaudeCommand);
-            Assert.Equal($"[mcp_servers.lightsql-9000]{Environment.NewLine}url = \"http://127.0.0.1:9000/mcp\"", tab.CodexConfig);
+            Assert.Equal("LightSQL-9000", tab.ClientName);
         }
 
         [Fact]
@@ -275,7 +315,7 @@ namespace LightSQL.Tests
                 Password = "s3cret"
             };
 
-            McpServerTabViewModel tab = new(hostFactory, clipboardService, dialogService, profile, "SQL01", null);
+            McpServerTabViewModel tab = new(hostFactory, clipboardService, dialogService, metadataStore, profile, "SQL01", null);
 
             Assert.Equal("SQL Server login 'reporter'", tab.AuthenticationText);
             Assert.DoesNotContain("s3cret", tab.AuthenticationText);
@@ -285,7 +325,7 @@ namespace LightSQL.Tests
         public void Profile_IsCopied_SoLaterEditsDoNotAffectTheServer()
         {
             ConnectionProfile profile = new() { Server = "sql01" };
-            McpServerTabViewModel tab = new(hostFactory, clipboardService, dialogService, profile, "SQL01", null);
+            McpServerTabViewModel tab = new(hostFactory, clipboardService, dialogService, metadataStore, profile, "SQL01", null);
 
             profile.Server = "other";
             _ = tab.StartAsync();
@@ -300,9 +340,9 @@ namespace LightSQL.Tests
         /// <returns>The tab (not started).</returns>
         private McpServerTabViewModel CreateTab(string? database)
         {
-            ConnectionProfile profile = new() { Server = "sql01" };
+            ConnectionProfile profile = new() { Name = "conn1", Server = "sql01" };
 
-            return new McpServerTabViewModel(hostFactory, clipboardService, dialogService, profile, "SQL01", database);
+            return new McpServerTabViewModel(hostFactory, clipboardService, dialogService, metadataStore, profile, "SQL01", database);
         }
     }
 }
