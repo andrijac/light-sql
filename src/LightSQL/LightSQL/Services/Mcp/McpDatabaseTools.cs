@@ -1,45 +1,32 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using LightSQL.Models;
+using LightSQL.Services.Tools;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace LightSQL.Services.Mcp
 {
     /// <summary>
-    /// The tools an MCP server offers to AI clients (Claude, Codex, ...): list the
-    /// databases, list a database's tables and views, describe a table's columns
-    /// and execute SQL against the connected engine (SQL Server, PostgreSQL or MySQL).
-    /// Every call is reported through a callback so the server tab can show what the AI did.
-    /// <para>
-    /// The server is locked to a single database (its default). A tool call that names
-    /// another database is rejected, and <c>list_databases</c> returns only that database.
-    /// </para>
-    /// <para>
-    /// In read-only mode (the default) execute_query first rejects batches that
-    /// could change anything (<see cref="ISqlStatementAnalyzer.FindWriteOperation"/>)
-    /// and then runs the rest in a transaction that is always rolled back, so a
-    /// change the check missed is still undone. Write-access runs batches as is.
-    /// </para>
+    /// The MCP adapter over <see cref="DatabaseToolExecutor"/>: exposes the database tools
+    /// (list databases, list a database's tables and views, describe a table's columns and
+    /// execute SQL) to AI clients (Claude, Codex, ...) through the MCP C# SDK. All logic,
+    /// safety (single-database lock, read-only/write-access) and output live in the executor,
+    /// which the in-app chat shares; this type only maps to and from <see cref="CallToolResult"/>.
     /// </summary>
     [McpServerToolType]
     public sealed class McpDatabaseTools
     {
-        private readonly ISqlConnectionService sqlService;
-        private readonly ISqlStatementAnalyzer statementAnalyzer;
-        private readonly string? defaultDatabase;
-        private readonly Func<McpAccessMode> getAccessMode;
-        private readonly Action<McpToolCall>? toolCalled;
+        private readonly DatabaseToolExecutor executor;
 
         /// <summary>
         /// Creates the tool set for one MCP server.
         /// </summary>
         /// <param name="sqlService">
-        /// The server's own, already connected SQL service (not the one the query
-        /// tabs use, so disconnecting the main window does not affect the server).
+        /// The server's own, already connected SQL service (not the one the query tabs use, so
+        /// disconnecting the main window does not affect the server).
         /// </param>
         /// <param name="statementAnalyzer">Detects statements that could change data (read-only mode).</param>
-        /// <param name="defaultDatabase">The database used when a call names none; null for the connection's default.</param>
+        /// <param name="defaultDatabase">The single database to serve; null for the connection's default.</param>
         /// <param name="getAccessMode">Returns the current access mode; read on every query.</param>
         /// <param name="toolCalled">Called after every tool call; may be null.</param>
         public McpDatabaseTools(
@@ -49,11 +36,7 @@ namespace LightSQL.Services.Mcp
             Func<McpAccessMode> getAccessMode,
             Action<McpToolCall>? toolCalled)
         {
-            this.sqlService = sqlService;
-            this.statementAnalyzer = statementAnalyzer;
-            this.defaultDatabase = string.IsNullOrWhiteSpace(defaultDatabase) == true ? null : defaultDatabase;
-            this.getAccessMode = getAccessMode;
-            this.toolCalled = toolCalled;
+            executor = new DatabaseToolExecutor(sqlService, statementAnalyzer, defaultDatabase, getAccessMode, toolCalled);
         }
 
         /// <summary>
@@ -63,153 +46,74 @@ namespace LightSQL.Services.Mcp
         {
             get
             {
-                return defaultDatabase ?? sqlService.CurrentDatabase;
+                return executor.DefaultDatabase;
             }
         }
 
         /// <summary>
-        /// The single database this server is locked to. Every tool operates only on
-        /// this database; a tool call naming any other database is rejected.
-        /// </summary>
-        private string LockedDatabase
-        {
-            get
-            {
-                return DefaultDatabase ?? sqlService.AdministrativeDatabase ?? string.Empty;
-            }
-        }
-
-        /// <summary>
-        /// Splits a table reference into schema and name. Accepts "Orders",
-        /// "dbo.Orders" and bracketed forms such as "[dbo].[Order Details]"; an
-        /// explicit schema argument wins over one in the name.
+        /// Splits a table reference into schema and name (see
+        /// <see cref="DatabaseToolExecutor.ParseObjectName"/>).
         /// </summary>
         /// <param name="table">The table or view name, optionally schema-qualified.</param>
         /// <param name="schema">An explicit schema, or null.</param>
+        /// <param name="defaultSchema">The engine's default schema, or null.</param>
         /// <returns>The schema (default "dbo") and the object name.</returns>
         public static (string Schema, string Name) ParseObjectName(string table, string? schema, string? defaultSchema = "dbo")
         {
-            string trimmed = table.Trim();
-            string? parsedSchema = null;
-            string name = trimmed;
-
-            int separator = FindSchemaSeparator(trimmed);
-
-            if (separator > 0)
-            {
-                parsedSchema = trimmed.Substring(0, separator);
-                name = trimmed.Substring(separator + 1);
-            }
-
-            string resolvedSchema = string.IsNullOrWhiteSpace(schema) == false
-                ? schema
-                : parsedSchema ?? defaultSchema ?? string.Empty;
-
-            return (Unbracket(resolvedSchema), Unbracket(name));
+            return DatabaseToolExecutor.ParseObjectName(table, schema, defaultSchema);
         }
 
         /// <summary>
-        /// Lists the online databases on the server.
+        /// Lists the database this server is locked to.
         /// </summary>
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
-        /// <returns>The database names as a JSON array.</returns>
+        /// <returns>The database name as a JSON array.</returns>
         [McpServerTool(Name = "list_databases", Title = "List databases", ReadOnly = true, OpenWorld = false)]
         [Description("Lists the database this server is locked to (a single-item list).")]
-        public Task<CallToolResult> ListDatabasesAsync(CancellationToken cancellationToken = default)
+        public async Task<CallToolResult> ListDatabasesAsync(CancellationToken cancellationToken = default)
         {
-            return RunAsync("list_databases", string.Empty, null, () =>
-            {
-                string locked = LockedDatabase;
-
-                IReadOnlyList<string> databases = string.IsNullOrEmpty(locked) == true
-                    ? Array.Empty<string>()
-                    : new[] { locked };
-
-                return Task.FromResult((McpResultFormatter.FormatNames(databases), true, $"{databases.Count} database(s)"));
-            });
+            return ToResult(await executor.ListDatabasesAsync(cancellationToken));
         }
 
         /// <summary>
-        /// Lists the tables and views of a database.
+        /// Lists the tables and views of the locked database.
         /// </summary>
-        /// <param name="database">The database, or null for the default.</param>
+        /// <param name="database">The database named by the call (rejected unless it is the locked one).</param>
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
         /// <returns>The objects as JSON.</returns>
         [McpServerTool(Name = "list_tables", Title = "List tables and views", ReadOnly = true, OpenWorld = false)]
         [Description("Lists the tables and views (schema, name, type) of a database.")]
-        public Task<CallToolResult> ListTablesAsync(
+        public async Task<CallToolResult> ListTablesAsync(
             [Description("Omit this. The server is locked to a single database; naming another one is rejected.")] string? database = null,
             CancellationToken cancellationToken = default)
         {
-            string target = LockedDatabase;
-
-            return RunAsync("list_tables", target, target, async () =>
-            {
-                string? violation = GetLockViolation(database);
-
-                if (violation is not null)
-                {
-                    return (violation, false, "Blocked (locked database)");
-                }
-
-                IReadOnlyList<SchemaObject> tables = await sqlService.GetTablesAsync(target, cancellationToken);
-                IReadOnlyList<SchemaObject> views = await sqlService.GetViewsAsync(target, cancellationToken);
-
-                string json = McpResultFormatter.FormatObjects(target, tables, views);
-
-                return (json, true, $"{tables.Count} table(s), {views.Count} view(s)");
-            });
+            return ToResult(await executor.ListTablesAsync(database, cancellationToken));
         }
 
         /// <summary>
-        /// Lists the columns of a table or view.
+        /// Lists the columns of a table or view in the locked database.
         /// </summary>
         /// <param name="table">The table or view name, optionally "schema.name".</param>
         /// <param name="schema">The schema, or null (default "dbo").</param>
-        /// <param name="database">The database, or null for the default.</param>
+        /// <param name="database">The database named by the call (rejected unless it is the locked one).</param>
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
         /// <returns>The columns as JSON.</returns>
         [McpServerTool(Name = "describe_table", Title = "Describe a table", ReadOnly = true, OpenWorld = false)]
         [Description("Lists the columns (name, SQL type, nullability) of a table or view.")]
-        public Task<CallToolResult> DescribeTableAsync(
+        public async Task<CallToolResult> DescribeTableAsync(
             [Description("Table or view name, e.g. 'Orders' or 'sales.Orders'.")] string table,
             [Description("Schema name. Omit to use the schema in 'table', or the engine default (dbo / public; ignored by MySQL).")] string? schema = null,
             [Description("Omit this. The server is locked to a single database; naming another one is rejected.")] string? database = null,
             CancellationToken cancellationToken = default)
         {
-            string target = LockedDatabase;
-            (string Schema, string Name) objectName = ParseObjectName(table, schema, sqlService.Dialect?.DefaultSchema);
-            string qualified = string.IsNullOrEmpty(objectName.Schema) == true
-                ? objectName.Name
-                : $"{objectName.Schema}.{objectName.Name}";
-
-            return RunAsync("describe_table", qualified, target, async () =>
-            {
-                string? violation = GetLockViolation(database);
-
-                if (violation is not null)
-                {
-                    return (violation, false, "Blocked (locked database)");
-                }
-
-                IReadOnlyList<ColumnInfo> columns = await sqlService.GetColumnsAsync(target, objectName.Schema, objectName.Name, cancellationToken);
-
-                if (columns.Count == 0)
-                {
-                    return ($"Table or view '{qualified}' was not found in database '{target}'.", false, "Not found");
-                }
-
-                string json = McpResultFormatter.FormatColumns(target, objectName.Schema, objectName.Name, columns);
-
-                return (json, true, $"{columns.Count} column(s)");
-            });
+            return ToResult(await executor.DescribeTableAsync(table, schema, database, cancellationToken));
         }
 
         /// <summary>
-        /// Executes a T-SQL batch and returns its result sets and messages.
+        /// Executes a SQL batch and returns its result sets and messages.
         /// </summary>
-        /// <param name="sql">The T-SQL batch.</param>
-        /// <param name="database">The database, or null for the default.</param>
+        /// <param name="sql">The SQL batch.</param>
+        /// <param name="database">The database named by the call (rejected unless it is the locked one).</param>
         /// <param name="maxRows">Rows returned per result set.</param>
         /// <param name="cancellationToken">Cancelled when the client abandons the call.</param>
         /// <returns>The result as JSON; an error result when the batch failed.</returns>
@@ -220,219 +124,27 @@ namespace LightSQL.Services.Mcp
             + "only queries that read data are accepted (no INSERT/UPDATE/DELETE, DDL, EXEC/CALL or SELECT INTO) "
             + "and the batch is rolled back. "
             + "Each call runs on its own connection: temporary tables, session settings and USE do not carry over to the next call.")]
-        public Task<CallToolResult> ExecuteQueryAsync(
+        public async Task<CallToolResult> ExecuteQueryAsync(
             [Description("The SQL batch to execute, in the connected engine's dialect (no GO separators).")] string sql,
             [Description("Omit this. The server is locked to a single database; naming another one is rejected.")] string? database = null,
             [Description("Maximum rows returned per result set (default 200, at most 5000).")] int maxRows = McpResultFormatter.DefaultMaxRows,
             CancellationToken cancellationToken = default)
         {
-            string target = LockedDatabase;
-            int limit = McpResultFormatter.ClampMaxRows(maxRows);
-
-            return RunAsync("execute_query", sql, target, async () =>
-            {
-                string? violation = GetLockViolation(database);
-
-                if (violation is not null)
-                {
-                    return (violation, false, "Blocked (locked database)");
-                }
-
-                if (string.IsNullOrWhiteSpace(sql) == true)
-                {
-                    return ("The 'sql' argument is empty.", false, "Empty query");
-                }
-
-                bool isReadOnly = getAccessMode() != McpAccessMode.ReadWrite;
-
-                if (isReadOnly == true)
-                {
-                    string? writeOperation = statementAnalyzer.FindWriteOperation(sql);
-
-                    if (writeOperation is not null)
-                    {
-                        string message = $"Rejected: this MCP server is read-only and the batch contains {writeOperation}. "
-                            + "Only queries that read data are allowed (SELECT / WITH, variables, control flow). "
-                            + "The user can grant write-access in LightSQL if changes are intended.";
-
-                        return (message, false, $"Blocked (read-only): {writeOperation}");
-                    }
-                }
-
-                QueryExecutionResult result = isReadOnly == true
-                    ? await sqlService.ExecuteReadOnlyBatchAsync(sql, target, cancellationToken)
-                    : await sqlService.ExecuteBatchAsync(sql, target, cancellationToken);
-                string json = McpResultFormatter.FormatExecutionResult(result, target, limit);
-
-                string outcome = result.IsSuccess == true
-                    ? DescribeSuccess(result)
-                    : FirstLine(result.Messages);
-
-                return (json, result.IsSuccess, outcome);
-            });
+            return ToResult(await executor.ExecuteQueryAsync(sql, database, maxRows, cancellationToken));
         }
 
         /// <summary>
-        /// Summarises a successful batch for the activity log.
+        /// Maps an executor outcome to an MCP tool result.
         /// </summary>
-        /// <param name="result">The execution result.</param>
-        /// <returns>For example "2 result set(s), 15 row(s)" or "3 row(s) affected".</returns>
-        private static string DescribeSuccess(QueryExecutionResult result)
-        {
-            if (result.ResultTables.Count > 0)
-            {
-                return $"{result.ResultTables.Count} result set(s), {result.TotalRows} row(s)";
-            }
-
-            return $"{result.RecordsAffected} row(s) affected";
-        }
-
-        /// <summary>
-        /// Returns the first non-empty line of a text, used to summarise errors.
-        /// </summary>
-        /// <param name="text">The text.</param>
-        /// <returns>The first line, or "Failed" when the text is empty.</returns>
-        private static string FirstLine(string text)
-        {
-            string? line = text
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .FirstOrDefault(candidate => candidate.StartsWith("Msg ", StringComparison.Ordinal) == false);
-
-            return line ?? "Failed";
-        }
-
-        /// <summary>
-        /// Finds the dot that separates schema from name, ignoring dots inside
-        /// brackets (e.g. "[my.schema].[t]").
-        /// </summary>
-        /// <param name="reference">The object reference.</param>
-        /// <returns>The index of the separator, or -1 when there is none.</returns>
-        private static int FindSchemaSeparator(string reference)
-        {
-            bool inBrackets = false;
-
-            for (int index = 0; index < reference.Length; index++)
-            {
-                char current = reference[index];
-
-                if (current == '[')
-                {
-                    inBrackets = true;
-                }
-                else if (current == ']')
-                {
-                    inBrackets = false;
-                }
-                else if (current == '.' && inBrackets == false)
-                {
-                    return index;
-                }
-            }
-
-            return -1;
-        }
-
-        /// <summary>
-        /// Removes surrounding brackets from an identifier ("[Order Details]" becomes
-        /// "Order Details", "]]" becomes "]").
-        /// </summary>
-        /// <param name="identifier">The identifier.</param>
-        /// <returns>The plain identifier.</returns>
-        private static string Unbracket(string identifier)
-        {
-            string trimmed = identifier.Trim();
-
-            if (trimmed.Length >= 2 && trimmed.StartsWith('[') == true && trimmed.EndsWith(']') == true)
-            {
-                return trimmed.Substring(1, trimmed.Length - 2).Replace("]]", "]");
-            }
-
-            return trimmed;
-        }
-
-        /// <summary>
-        /// Checks a tool call's requested database against the one this server is
-        /// locked to. The server only serves a single database, so a call that names
-        /// a different one is refused.
-        /// </summary>
-        /// <param name="requested">The database named by the call, or null/empty for the locked one.</param>
-        /// <returns>An error message when another database was requested, or null when the call is allowed.</returns>
-        private string? GetLockViolation(string? requested)
-        {
-            if (string.IsNullOrWhiteSpace(requested) == true)
-            {
-                return null;
-            }
-
-            string locked = LockedDatabase;
-
-            if (string.Equals(requested.Trim(), locked, StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return null;
-            }
-
-            return $"Rejected: this MCP server is locked to database '{locked}' and cannot access '{requested.Trim()}'. "
-                + "Omit the 'database' argument, or set it to the server's database.";
-        }
-
-        /// <summary>
-        /// Runs a tool body, times it, turns failures into MCP error results (so the
-        /// AI sees the SQL error text) and reports the call to the activity log.
-        /// </summary>
-        /// <param name="toolName">The tool name.</param>
-        /// <param name="detail">The main argument, shown in the log.</param>
-        /// <param name="database">The database used, or null.</param>
-        /// <param name="body">Returns the result text, whether it succeeded and a short outcome.</param>
+        /// <param name="outcome">The executor outcome.</param>
         /// <returns>The MCP tool result.</returns>
-        private async Task<CallToolResult> RunAsync(string toolName, string detail, string? database, Func<Task<(string Text, bool Success, string Outcome)>> body)
+        private static CallToolResult ToResult(ToolCallOutcome outcome)
         {
-            DateTime started = DateTime.Now;
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            string text;
-            bool success;
-            string outcome;
-
-            try
-            {
-                (text, success, outcome) = await body();
-            }
-            catch (OperationCanceledException)
-            {
-                Report(toolName, detail, database, started, stopwatch.Elapsed, false, "Cancelled by the client");
-
-                throw;
-            }
-            catch (Exception ex)
-            {
-                text = ex.Message;
-                success = false;
-                outcome = ex.Message;
-            }
-
-            Report(toolName, detail, database, started, stopwatch.Elapsed, success, outcome);
-
             return new CallToolResult
             {
-                Content = new List<ContentBlock> { new TextContentBlock { Text = text } },
-                IsError = success == false
+                Content = new List<ContentBlock> { new TextContentBlock { Text = outcome.Text } },
+                IsError = outcome.IsError
             };
-        }
-
-        /// <summary>
-        /// Sends one entry to the activity log callback.
-        /// </summary>
-        private void Report(string toolName, string detail, string? database, DateTime started, TimeSpan elapsed, bool success, string outcome)
-        {
-            toolCalled?.Invoke(new McpToolCall
-            {
-                Timestamp = started,
-                ToolName = toolName,
-                Detail = detail,
-                Database = database,
-                IsSuccess = success,
-                Outcome = outcome,
-                Elapsed = elapsed
-            });
         }
     }
 }

@@ -187,6 +187,22 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Opens a chat bound to a single database, in a new tab. Only a database node starts
+        /// one (the menu item is hidden on every other node).
+        /// </summary>
+        /// <param name="node">The invoking database node.</param>
+        [RelayCommand]
+        private void ChatWithDatabase(TreeNodeViewModel? node)
+        {
+            if (MainActions is null || node is null || node.ObjectType != DatabaseObjectType.Database)
+            {
+                return;
+            }
+
+            MainActions.OpenChatTab(node.DatabaseName);
+        }
+
+        /// <summary>
         /// Drops a database, table or view after confirmation.
         /// </summary>
         /// <param name="node">The node to drop.</param>

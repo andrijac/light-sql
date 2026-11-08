@@ -18,7 +18,7 @@ stops, because the running app locks its `.exe` and the build could not replace 
 
 ```
 ┌ Menu: File | Edit | Query | Database | Tools | Help ───────────────────────────┐
-├ Toolbar: [Connect] [Database ▼] [Start MCP] [Execute (F5)] [Cancel] [Open] [Save] ┤
+├ Toolbar: [Connect] [Database ▼] [Start MCP] [Chat] [Execute (F5)] [Cancel] [Open] [Save] ┤
 ├ Object Explorer │ [SQLQuery1 ✕] [report.sql *✕] [SQLQuery3 ✕]   ← query tabs │
 │  (lazy tree)    │ SQL editor of the selected tab (line numbers, highlighting)  │
 │                 │ ═══════ splitter ═════════════════════════════════════════   │
@@ -70,6 +70,17 @@ write-access** check box (with confirmation) lets the AI change data. The tab sh
 the connection, default database, access mode, port,
 endpoint, copy-ready client setup and a log of every tool call; closing the tab
 stops the server. Details: [mcp-server.md](mcp-server.md).
+
+## In-app chat
+
+The **Chat** toolbar button (next to the database dropdown), **Database → Chat with
+Database**, or a **database node's** right-click menu opens a chat tab bound to that
+database. An LLM answers your questions by running the same database tools in-process
+(no MCP client needed), **read-only by default** (tick **Allow write-access** to let it
+change data), and reuses any pasted metadata. Pick the **provider** and **model** at the top of
+the chat tab; add an API key per provider first in **Tools → AI Provider…** (Groq, Together,
+OpenRouter, OpenAI or a local server — each key is stored encrypted). Details:
+[chat.md](chat.md).
 
 ## Connecting
 
@@ -205,6 +216,8 @@ it is always clear which node the context menu acts on. Right-click a node for:
 - **Start MCP Server** — (database nodes only) start an MCP server locked to that
   database. See
   [mcp-server.md](mcp-server.md).
+- **Chat with Database** — (database nodes only) open an AI chat for that database. See
+  [chat.md](chat.md).
 - **Refresh** — reload the node's children.
 
 Creating databases is also available via **Database → New Database…**.

@@ -74,12 +74,18 @@
                 <MenuItem Header="Start _MCP Server"
                           Command="{Binding StartMcpServerCommand}"
                           ToolTip="Start an MCP server locked to the selected database so AI clients (Claude, Codex) can query it" />
+                <MenuItem Header="C_hat with Database"
+                          Command="{Binding ChatWithDatabaseCommand}"
+                          ToolTip="Open an AI chat for the selected database" />
                 <MenuItem Header="Database _Metadata..."
                           Command="{Binding EditDatabaseMetadataCommand}"
                           ToolTip="Paste schema/semantic metadata (JSON) for a database; it is sent to AI clients as extra instructions" />
             </MenuItem>
 
             <MenuItem Header="_Tools">
+                <MenuItem Header="AI _Provider..."
+                          Command="{Binding ShowAiProviderCommand}"
+                          ToolTip="Configure the LLM provider (OpenAI-compatible) used by the in-app chat" />
                 <MenuItem Header="Metadata Extraction _Prompt..."
                           Command="{Binding ShowMetadataPromptCommand}"
                           ToolTip="Show the AI prompt that generates database metadata JSON from a code repository" />
@@ -108,6 +114,10 @@
                         Command="{Binding StartMcpServerCommand}"
                         Margin="4,0,0,0"
                         ToolTip="Start an MCP server locked to the selected database (AI clients such as Claude or Codex can then query it)" />
+                <Button Content="Chat"
+                        Command="{Binding ChatWithDatabaseCommand}"
+                        Margin="4,0,0,0"
+                        ToolTip="Open an AI chat for the selected database" />
                 <Separator />
                 <Button Content="Execute (F5)"
                         Command="{Binding ExecuteQueryCommand}"
@@ -231,6 +241,11 @@
                                               Command="{Binding StartMcpServerCommand}"
                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                               Visibility="{Binding PlacementTarget.DataContext.ObjectType, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource DatabaseObjectTypeToVisibility}, ConverterParameter=Database}" />
+                                    <MenuItem Header="Chat with Database"
+                                              ToolTip="Open an AI chat for this database"
+                                              Command="{Binding ChatWithDatabaseCommand}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Visibility="{Binding PlacementTarget.DataContext.ObjectType, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource DatabaseObjectTypeToVisibility}, ConverterParameter=Database}" />
                                     <Separator />
                                     <MenuItem Header="Refresh"
                                               Command="{Binding RefreshCommand}"
@@ -323,6 +338,24 @@
                             </StackPanel>
                         </DataTemplate>
 
+                        <!-- Chat tab header: name (with database), close button. -->
+                        <DataTemplate DataType="{x:Type vm:ChatTabViewModel}">
+                            <StackPanel Orientation="Horizontal" ToolTip="{Binding ToolTip}">
+                                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" />
+                                <Button Content="✕"
+                                        Margin="6,0,0,0"
+                                        Padding="3,0"
+                                        FontSize="10"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Focusable="False"
+                                        ToolTip="Close (Ctrl+F4)"
+                                        Command="{Binding DataContext.CloseQueryCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+
                         <!-- Query tab: right-click menu. BasedOn keeps the themed look. -->
                         <Style x:Key="QueryTabItemStyle" TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
                             <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}" />
@@ -373,12 +406,31 @@
                                 </Setter.Value>
                             </Setter>
                         </Style>
+
+                        <!-- Chat tab: right-click menu. BasedOn keeps the themed look. -->
+                        <Style x:Key="ChatTabItemStyle" TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                            <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}" />
+                            <Setter Property="ContextMenu">
+                                <Setter.Value>
+                                    <ContextMenu DataContext="{Binding Path=PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Close"
+                                                  InputGestureText="Ctrl+F4"
+                                                  Command="{Binding CloseQueryCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <MenuItem Header="Close All But This"
+                                                  Command="{Binding CloseOtherQueriesCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    </ContextMenu>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
                     </TabControl.Resources>
 
                     <!-- Each kind of tab gets its own header style and right-click menu. -->
                     <TabControl.ItemContainerStyleSelector>
                         <controls:DocumentTabStyleSelector QueryTabStyle="{StaticResource QueryTabItemStyle}"
-                                                           McpServerTabStyle="{StaticResource McpServerTabItemStyle}" />
+                                                           McpServerTabStyle="{StaticResource McpServerTabItemStyle}"
+                                                           ChatTabStyle="{StaticResource ChatTabItemStyle}" />
                     </TabControl.ItemContainerStyleSelector>
                 </TabControl>
 
@@ -393,6 +445,9 @@
                             </DataTemplate>
                             <DataTemplate DataType="{x:Type vm:McpServerTabViewModel}">
                                 <views:McpServerTabView Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibility}}" />
+                            </DataTemplate>
+                            <DataTemplate DataType="{x:Type vm:ChatTabViewModel}">
+                                <views:ChatTabView Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibility}}" />
                             </DataTemplate>
                         </ItemsControl.Resources>
                         <ItemsControl.ItemsPanel>

@@ -134,15 +134,16 @@ To work with another database, start a second server for it; each gets its own t
 ## Database metadata (extra instructions for the AI)
 
 You can give the AI more than the live catalog exposes — primary and foreign keys,
-relationships, enum meanings, units, and which filters to apply — by pasting a JSON
-metadata document for a connection and database. LightSQL ships a prompt that generates
-that JSON from a code repository under **Tools → Metadata Extraction Prompt…** (with a
-**Copy** button). See [mcp-metadata.md](mcp-metadata.md) for the full workflow.
+relationships, enum meanings, units, and which filters to apply — by pasting a
+metadata document (JSON, Markdown or any text) for a connection and database. LightSQL
+ships a prompt that extracts this from a code repository under **Tools → Metadata
+Extraction Prompt…** (with a **Copy** button). See [mcp-metadata.md](mcp-metadata.md) for
+the full workflow.
 
 - Open **Database → Database Metadata…**, choose the connection and database, paste the
-  JSON and **Save**. It is stored per connection + database in
-  `%APPDATA%\LightSQL\metadata.json`.
-- When a server starts for that connection and database, the JSON is appended to the
+  document and **Save**. Any text is accepted (it is not parsed). It is stored per
+  connection + database in `%APPDATA%\LightSQL\metadata.json`.
+- When a server starts for that connection and database, the document is appended to the
   server's **instructions** (the AI's "system prompt"), so the AI has it while writing
   queries. Editing the metadata applies the next time the server starts (restart a running
   server to pick it up).
@@ -183,8 +184,8 @@ that JSON from a code repository under **Tools → Metadata Extraction Prompt…
 | `McpPortFinder` | First free loopback port in 9000–9999 (`FindAvailablePort` is pure and unit-tested; `IsLoopbackPortAvailable` probes with an exclusive `TcpListener`). |
 | `McpRequestGuard` | `IsAllowedHost` / `IsAllowedOrigin` checks. |
 | `Models/McpServerSettings`, `McpToolCall`, `McpServerState` | Start settings (incl. `MetadataInstructions`, appended to the server instructions by the factory), activity log entry, server state (enum from 1). |
-| `Models/ConnectionMetadata`, `Services/IMetadataStore`, `MetadataStore` | A pasted JSON metadata document keyed by connection name + database, persisted in `%APPDATA%\LightSQL\metadata.json`. `McpServerTabViewModel.StartAsync` reads it by `profile.Name` + `DefaultDatabase` and passes it as `MetadataInstructions`. |
-| `ViewModels/MetadataDialogViewModel`, `Views/MetadataDialog` | The Database Metadata dialog: pick connection + database, paste JSON (validated with `JsonDocument.Parse`), save or clear via `IMetadataStore`. Opened from `MainViewModel.EditDatabaseMetadataCommand` through `IDialogService.ShowMetadataDialog`. |
+| `Models/ConnectionMetadata`, `Services/IMetadataStore`, `MetadataStore` | A pasted metadata document (JSON, Markdown or any text) keyed by connection name + database, persisted in `%APPDATA%\LightSQL\metadata.json` (the document is stored as a string in the `Json` field, kept for on-disk back-compat). `McpServerTabViewModel.StartAsync` reads it by `profile.Name` + `DefaultDatabase` and passes it as `MetadataInstructions`. |
+| `ViewModels/MetadataDialogViewModel`, `Views/MetadataDialog` | The Database Metadata dialog: pick connection + database, paste any text (JSON or Markdown — not parsed), save or clear via `IMetadataStore`. Opened from `MainViewModel.EditDatabaseMetadataCommand` through `IDialogService.ShowMetadataDialog`. |
 | `Converters/DatabaseObjectTypeToVisibilityConverter` | Shows the Object Explorer "Start MCP Server" menu item only on a `Database` node. |
 | `ViewModels/McpServerTabViewModel` | The tab: state, port, endpoint, client setup text, copy commands (`IClipboardService`), activity log, access mode (`IsReadWrite` with confirmation through `IDialogService`; stored in a `volatile` field read by server threads). Tool calls arrive on server threads and are posted to the UI `SynchronizationContext`. Keeps a clone of the profile. |
 | `Views/McpServerTabView` | The tab's content. |

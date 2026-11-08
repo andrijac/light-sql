@@ -6,6 +6,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightSQL.Models;
 using LightSQL.Services;
+using LightSQL.Services.Database;
+using LightSQL.Services.Llm;
 using LightSQL.Services.Mcp;
 
 namespace LightSQL.ViewModels
@@ -25,6 +27,8 @@ namespace LightSQL.ViewModels
         private readonly IMcpServerHostFactory mcpHostFactory;
         private readonly IClipboardService clipboardService;
         private readonly IMetadataStore metadataStore;
+        private readonly IDatabaseProviderRegistry providerRegistry;
+        private readonly ILlmClientFactory llmClientFactory;
 
         /// <summary>
         /// The connection used by the last successful Connect; MCP servers are
@@ -48,6 +52,7 @@ namespace LightSQL.ViewModels
         [NotifyCanExecuteChangedFor(nameof(ExecuteQueryCommand))]
         [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartMcpServerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ChatWithDatabaseCommand))]
         private bool isConnected;
 
         [ObservableProperty]
@@ -56,6 +61,7 @@ namespace LightSQL.ViewModels
         [NotifyCanExecuteChangedFor(nameof(SaveFileCommand))]
         [NotifyCanExecuteChangedFor(nameof(SaveFileAsCommand))]
         [NotifyCanExecuteChangedFor(nameof(StartMcpServerCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ChatWithDatabaseCommand))]
         [NotifyPropertyChangedFor(nameof(SelectedQueryTab))]
         [NotifyPropertyChangedFor(nameof(IsQueryTabSelected))]
         private DocumentTabViewModel? selectedTab;
@@ -82,7 +88,9 @@ namespace LightSQL.ViewModels
         /// <param name="objectExplorer">The Object Explorer view model.</param>
         /// <param name="mcpHostFactory">Starts MCP servers for the connection.</param>
         /// <param name="clipboardService">Clipboard access for the MCP tabs.</param>
-        /// <param name="metadataStore">Database metadata sent to AI clients by MCP servers.</param>
+        /// <param name="metadataStore">Database metadata sent to AI clients by MCP servers and chat.</param>
+        /// <param name="providerRegistry">Resolves the engine display name for chat tabs.</param>
+        /// <param name="llmClientFactory">Creates the LLM client for chat tabs.</param>
         public MainViewModel(
             ISqlConnectionService sqlService,
             ISqlStatementAnalyzer statementAnalyzer,
@@ -92,7 +100,9 @@ namespace LightSQL.ViewModels
             ObjectExplorerViewModel objectExplorer,
             IMcpServerHostFactory mcpHostFactory,
             IClipboardService clipboardService,
-            IMetadataStore metadataStore)
+            IMetadataStore metadataStore,
+            IDatabaseProviderRegistry providerRegistry,
+            ILlmClientFactory llmClientFactory)
         {
             this.sqlService = sqlService;
             this.statementAnalyzer = statementAnalyzer;
@@ -102,6 +112,8 @@ namespace LightSQL.ViewModels
             this.mcpHostFactory = mcpHostFactory;
             this.clipboardService = clipboardService;
             this.metadataStore = metadataStore;
+            this.providerRegistry = providerRegistry;
+            this.llmClientFactory = llmClientFactory;
 
             ObjectExplorer = objectExplorer;
             ObjectExplorer.MainActions = this;
@@ -248,6 +260,32 @@ namespace LightSQL.ViewModels
             StatusMessage = tab.State == McpServerState.Running
                 ? $"MCP server listening on {tab.Endpoint}"
                 : "MCP server could not start";
+        }
+
+        /// <inheritdoc />
+        public void OpenChatTab(string? database)
+        {
+            if (connectedProfile is null || IsConnected == false)
+            {
+                dialogService.ShowInformation("Connect to a server first.", "Not Connected");
+
+                return;
+            }
+
+            ChatTabViewModel tab = new(
+                llmClientFactory,
+                dialogService,
+                clipboardService,
+                sqlService,
+                statementAnalyzer,
+                metadataStore,
+                providerRegistry,
+                connectedProfile,
+                sqlService.ServerName ?? connectedProfile.Server,
+                database);
+
+            AddDocumentTab(tab);
+            StatusMessage = $"Chat ready for {database ?? sqlService.CurrentDatabase}";
         }
 
         /// <summary>
@@ -457,6 +495,15 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
+        /// Opens a chat tab for the database selected in the toolbar dropdown.
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanStartMcpServer))]
+        private void ChatWithDatabase()
+        {
+            OpenChatTab(SelectedQueryTab?.ActiveDatabase ?? sqlService.CurrentDatabase);
+        }
+
+        /// <summary>
         /// Opens a new, empty query tab using the selected tab's database.
         /// </summary>
         [RelayCommand]
@@ -571,6 +618,16 @@ namespace LightSQL.ViewModels
             }
 
             SelectedTab = keep;
+        }
+
+        /// <summary>
+        /// Opens the AI Provider dialog (Tools menu) to configure the LLM provider used by the
+        /// in-app chat.
+        /// </summary>
+        [RelayCommand]
+        private void ShowAiProvider()
+        {
+            dialogService.ShowLlmSettingsDialog();
         }
 
         /// <summary>
@@ -918,8 +975,9 @@ namespace LightSQL.ViewModels
 
             if (e.PropertyName == nameof(QueryTabViewModel.ActiveDatabase) && sender is QueryTabViewModel tab)
             {
-                // The selected tab's database drives whether "Start MCP" is enabled.
+                // The selected tab's database drives whether "Start MCP" and "Chat" are enabled.
                 StartMcpServerCommand.NotifyCanExecuteChanged();
+                ChatWithDatabaseCommand.NotifyCanExecuteChanged();
 
                 string? listed = EnsureDatabaseListed(tab.ActiveDatabase);
 

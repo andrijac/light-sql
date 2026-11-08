@@ -246,6 +246,21 @@ namespace LightSQL.Services
             dialog.ShowDialog();
         }
 
+        /// <inheritdoc />
+        public bool ShowLlmSettingsDialog()
+        {
+            LlmSettingsDialogViewModel viewModel = serviceProvider.GetRequiredService<LlmSettingsDialogViewModel>();
+
+            LlmSettingsDialog dialog = new(viewModel)
+            {
+                Owner = GetOwner()
+            };
+
+            dialog.ShowDialog();
+
+            return viewModel.Saved;
+        }
+
         /// <summary>
         /// Shows a Windows common dialog, owned by the main window when there is one.
         /// </summary>

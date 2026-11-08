@@ -6,7 +6,7 @@ namespace LightSQL.Tests
 {
     /// <summary>
     /// Tests the Database Metadata dialog view model: offering connections, prefilling
-    /// saved metadata, validating JSON and saving (or clearing) an entry.
+    /// saved metadata, and saving (any text — JSON or Markdown) or clearing an entry.
     /// </summary>
     public class MetadataDialogViewModelTests
     {
@@ -52,7 +52,22 @@ namespace LightSQL.Tests
         }
 
         [Fact]
-        public void TrySave_WithInvalidJson_Fails_WithoutSaving()
+        public void TrySave_WithMarkdown_SavesTheEntry()
+        {
+            MetadataDialogViewModel viewModel = CreateViewModel();
+            viewModel.Initialize("conn1", "Sales");
+            viewModel.Json = "# Sales\n\n- `Orders` — one row per order.";
+
+            bool saved = viewModel.TrySave(out string? error);
+
+            Assert.True(saved);
+            Assert.Null(error);
+            Assert.True(viewModel.Saved);
+            Assert.Equal("# Sales\n\n- `Orders` — one row per order.", metadataStore.Get("conn1", "Sales")!.Json);
+        }
+
+        [Fact]
+        public void TrySave_WithFreeText_IsNotRejectedAsInvalidJson()
         {
             MetadataDialogViewModel viewModel = CreateViewModel();
             viewModel.Initialize("conn1", "Sales");
@@ -60,10 +75,9 @@ namespace LightSQL.Tests
 
             bool saved = viewModel.TrySave(out string? error);
 
-            Assert.False(saved);
-            Assert.NotNull(error);
-            Assert.False(viewModel.Saved);
-            Assert.Null(metadataStore.Get("conn1", "Sales"));
+            Assert.True(saved);
+            Assert.Null(error);
+            Assert.Equal("{not json", metadataStore.Get("conn1", "Sales")!.Json);
         }
 
         [Fact]

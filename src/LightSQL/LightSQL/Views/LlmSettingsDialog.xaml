@@ -1,0 +1,79 @@
+<Window x:Class="LightSQL.Views.LlmSettingsDialog"
+        Style="{DynamicResource Theme.WindowStyle}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="Height"
+        Width="560"
+        Title="AI Provider">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+    </Window.Resources>
+
+    <StackPanel Margin="16">
+
+        <TextBlock Text="Add an API key for each AI provider you want to use in the in-app Chat. Pick the provider and model in the chat tab. Every provider is used through its OpenAI-compatible endpoint."
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12"
+                   Foreground="{DynamicResource Theme.SecondaryForeground}" />
+
+        <!-- One key field per provider. The key is read from each PasswordBox in code-behind. -->
+        <ItemsControl ItemsSource="{Binding Providers}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border BorderBrush="{DynamicResource Theme.ControlBorder}"
+                            BorderThickness="1"
+                            Padding="10"
+                            Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" />
+                            <TextBlock Text="{Binding BaseUrl}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource Theme.SecondaryForeground}"
+                                       Margin="0,0,0,6" />
+
+                            <!-- Local servers need no key, so hide the box for them. -->
+                            <PasswordBox PasswordChanged="ApiKeyBox_PasswordChanged"
+                                         Margin="0,0,0,4"
+                                         Visibility="{Binding RequiresApiKey, Converter={StaticResource BooleanToVisibility}}" />
+
+                            <TextBlock Text="{Binding KeyStatus}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource Theme.SecondaryForeground}" />
+                            <TextBlock Text="{Binding KeyHint}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource Theme.SecondaryForeground}"
+                                       IsEnabled="False" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="Max tokens" Margin="0,4,0,2" />
+        <TextBox Text="{Binding MaxTokens, UpdateSourceTrigger=PropertyChanged}"
+                 Width="120"
+                 HorizontalAlignment="Left"
+                 Margin="0,0,0,10" />
+
+        <TextBlock Text="Keys are stored encrypted (Windows DPAPI) and sent only to their own provider. Treat API keys as sensitive and share them with care."
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource Theme.SecondaryForeground}" />
+
+        <StackPanel Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Save"
+                    Width="90"
+                    Margin="0,0,8,0"
+                    IsDefault="True"
+                    Click="SaveButton_Click" />
+            <Button Content="Cancel"
+                    Width="90"
+                    IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

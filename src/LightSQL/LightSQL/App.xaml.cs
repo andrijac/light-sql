@@ -1,6 +1,8 @@
-﻿using System.Windows;
+﻿using System.Net.Http;
+using System.Windows;
 using LightSQL.Services;
 using LightSQL.Services.Database;
+using LightSQL.Services.Llm;
 using LightSQL.Services.Mcp;
 using LightSQL.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,6 +75,11 @@ namespace LightSQL
             services.AddSingleton<IDatabaseProviderRegistry, DatabaseProviderRegistry>();
             services.AddSingleton<IConnectionStore, ConnectionStore>();
             services.AddSingleton<IMetadataStore, MetadataStore>();
+            // In-app chat: LLM provider settings (DPAPI-encrypted key) and the client factory.
+            // One HttpClient is shared by every chat client.
+            services.AddSingleton<HttpClient>();
+            services.AddSingleton<ILlmSettingsStore, LlmSettingsStore>();
+            services.AddSingleton<ILlmClientFactory, LlmClientFactory>();
             services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<ISqlConnectionService, SqlConnectionService>();
             services.AddSingleton<ISqlStatementAnalyzer, SqlStatementAnalyzer>();
@@ -98,6 +105,7 @@ namespace LightSQL
             services.AddTransient<OptionsViewModel>();
             services.AddTransient<MetadataDialogViewModel>();
             services.AddTransient<MetadataPromptDialogViewModel>();
+            services.AddTransient<LlmSettingsDialogViewModel>();
 
             // Windows.
             services.AddSingleton<MainWindow>();

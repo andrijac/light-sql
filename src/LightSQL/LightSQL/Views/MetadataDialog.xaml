@@ -33,9 +33,9 @@
             <TextBox Width="320" Text="{Binding Database, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
 
-        <TextBlock Grid.Row="2" Text="Metadata (JSON)" Margin="0,0,0,4" />
+        <TextBlock Grid.Row="2" Text="Metadata (JSON or Markdown)" Margin="0,0,0,4" />
 
-        <!-- The pasted JSON document. Monospace, no wrapping, scrollable. -->
+        <!-- The pasted metadata document (JSON, Markdown or any text). Monospace, no wrapping, scrollable. -->
         <TextBox Grid.Row="3"
                  Text="{Binding Json, UpdateSourceTrigger=PropertyChanged}"
                  AcceptsReturn="True"
@@ -49,7 +49,7 @@
                    Margin="0,8,0,0"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource Theme.SecondaryForeground}"
-                   Text="This text is sent to AI clients as instructions. Do not include passwords, tokens, or connection strings. Leave it empty to remove the saved metadata." />
+                   Text="Paste JSON, Markdown or any text the AI can read. This text is sent to AI clients as instructions, so do not include passwords, tokens, or connection strings. Leave it empty to remove the saved metadata." />
 
         <StackPanel Grid.Row="5"
                     Orientation="Horizontal"

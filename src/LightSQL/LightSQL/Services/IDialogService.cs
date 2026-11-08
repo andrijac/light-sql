@@ -90,5 +90,11 @@ namespace LightSQL.Services
         /// Shows the Metadata Extraction Prompt dialog (the embedded prompt plus a Copy button).
         /// </summary>
         void ShowMetadataPromptDialog();
+
+        /// <summary>
+        /// Shows the AI Provider dialog (the in-app chat's LLM provider settings).
+        /// </summary>
+        /// <returns>True if the user saved the settings.</returns>
+        bool ShowLlmSettingsDialog();
     }
 }

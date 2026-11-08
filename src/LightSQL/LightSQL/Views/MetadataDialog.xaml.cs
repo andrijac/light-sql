@@ -4,8 +4,8 @@ using LightSQL.ViewModels;
 namespace LightSQL.Views
 {
     /// <summary>
-    /// The Database Metadata dialog, where the user pastes a JSON metadata document for
-    /// a connection + database.
+    /// The Database Metadata dialog, where the user pastes a metadata document (JSON,
+    /// Markdown or any text) for a connection + database.
     /// </summary>
     public partial class MetadataDialog : Window
     {

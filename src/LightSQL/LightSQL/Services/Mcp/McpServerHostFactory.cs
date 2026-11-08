@@ -2,6 +2,7 @@ using System.IO;
 using System.Net;
 using LightSQL.Models;
 using LightSQL.Services.Database;
+using LightSQL.Services.Tools;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -64,17 +65,9 @@ namespace LightSQL.Services.Mcp
 
             McpDatabaseTools tools = new(sqlService, statementAnalyzer, settings.DefaultDatabase, settings.GetAccessMode, settings.ToolCalled);
             IDatabaseProvider provider = providerRegistry.Get(settings.Profile.Engine);
-            string instructions = BuildInstructions(provider.DisplayName, sqlService.ServerName, tools.DefaultDatabase);
 
-            // Append the user's pasted database metadata (schema and semantics) so the
-            // AI client has it when constructing queries.
-            if (string.IsNullOrWhiteSpace(settings.MetadataInstructions) == false)
-            {
-                instructions += "\n\n## Database metadata (authoritative schema and semantics)\n"
-                    + "The following JSON, provided by the user in LightSQL, describes this database's tables, "
-                    + "columns, keys, relationships and meanings. Use it to write correct, well-filtered queries.\n"
-                    + settings.MetadataInstructions;
-            }
+            // The MCP server and the in-app chat share this prompt (and the pasted metadata).
+            string instructions = DatabaseAssistantPrompt.Build(provider.DisplayName, sqlService.ServerName, tools.DefaultDatabase, settings.MetadataInstructions);
 
             HashSet<int> failedPorts = new();
 
@@ -127,12 +120,7 @@ namespace LightSQL.Services.Mcp
         /// <returns>The instructions text.</returns>
         public static string BuildInstructions(string engineName, string? serverName, string? defaultDatabase)
         {
-            return $"Gives access to the {engineName} server '{serverName}' through LightSQL. "
-                + $"Queries use the {engineName} SQL dialect. This server is locked to the single database '{defaultDatabase}' and can only access that database; omit the 'database' argument (naming a different database is rejected). "
-                + "Use list_tables and describe_table to explore the schema before writing queries. "
-                + "The server is read-only by default: execute_query then rejects statements that change anything and rolls every batch back. "
-                + "If the user granted write-access, execute_query can change data, so only run INSERT, UPDATE, DELETE or DDL when the user asked for it. "
-                + "Every call runs on a fresh connection, so temporary tables, session settings and USE do not persist between calls.";
+            return DatabaseAssistantPrompt.BuildInstructions(engineName, serverName, defaultDatabase);
         }
 
         /// <summary>

@@ -235,7 +235,9 @@ namespace LightSQL.Tests
                 new ObjectExplorerViewModel(sqlService, dialogService),
                 mcpHostFactory,
                 new FakeClipboardService(),
-                metadataStore);
+                metadataStore,
+                new LightSQL.Services.Database.DatabaseProviderRegistry(),
+                new FakeLlmClientFactory());
         }
 
         /// <summary>

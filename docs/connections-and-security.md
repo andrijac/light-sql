@@ -6,7 +6,8 @@
 |---|---|
 | Application options | `%APPDATA%\LightSQL\options.json` |
 | Saved connections | `%APPDATA%\LightSQL\connections.json` |
-| Database metadata (for MCP) | `%APPDATA%\LightSQL\metadata.json` |
+| Database metadata (for MCP + chat) | `%APPDATA%\LightSQL\metadata.json` |
+| AI provider settings (for chat) | `%APPDATA%\LightSQL\llm.json` (one API key per provider, each DPAPI-encrypted) |
 | Query scripts | Wherever you save them — ordinary `.sql` files chosen with **File → Save As** |
 
 Query files are plain text: don't put passwords or connection strings with
@@ -75,6 +76,15 @@ longer use.
 `metadata.json` and sent to the AI client as part of the server's instructions, so it must
 not contain passwords, tokens or connection strings. The file holds only what you paste;
 LightSQL never writes credentials into it.
+
+## In-app chat
+
+The in-app chat ([chat.md](chat.md)) runs the same database tools in-process, locked to one
+database and read-only by default. You pick an AI provider (Groq, Together, OpenRouter, OpenAI or
+a local server) and model in the chat tab. Each provider's **API key** is stored encrypted (DPAPI,
+like connection passwords) in `llm.json` — never in plaintext — and is sent only to its own
+provider. Your chat messages and query results are sent to the selected provider, so keep the chat
+read-only and don't expose data you may not share.
 
 ## Recommendations
 

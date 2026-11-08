@@ -56,6 +56,17 @@ namespace LightSQL.Services
         }
 
         /// <summary>
+        /// Full path of the in-app chat's LLM provider settings JSON file.
+        /// </summary>
+        public static string LlmSettingsFilePath
+        {
+            get
+            {
+                return Path.Combine(ConfigDirectory, "llm.json");
+            }
+        }
+
+        /// <summary>
         /// Ensures a directory exists, creating it (and any parents) if needed.
         /// </summary>
         /// <param name="path">The directory path to ensure.</param>

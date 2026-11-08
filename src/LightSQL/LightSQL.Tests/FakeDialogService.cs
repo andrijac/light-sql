@@ -171,5 +171,23 @@ namespace LightSQL.Tests
         {
             MetadataPromptDialogCount++;
         }
+
+        /// <summary>
+        /// The result returned by <see cref="ShowLlmSettingsDialog"/>.
+        /// </summary>
+        public bool LlmSettingsDialogResult { get; set; }
+
+        /// <summary>
+        /// How many times <see cref="ShowLlmSettingsDialog"/> was called.
+        /// </summary>
+        public int LlmSettingsDialogCount { get; private set; }
+
+        /// <inheritdoc />
+        public bool ShowLlmSettingsDialog()
+        {
+            LlmSettingsDialogCount++;
+
+            return LlmSettingsDialogResult;
+        }
     }
 }

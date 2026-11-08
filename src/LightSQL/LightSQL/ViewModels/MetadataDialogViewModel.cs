@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightSQL.Models;
 using LightSQL.Services;
@@ -7,10 +6,10 @@ using LightSQL.Services;
 namespace LightSQL.ViewModels
 {
     /// <summary>
-    /// Backs the Database Metadata dialog: the user pastes a JSON metadata document for
-    /// a connection + database, and it is saved through <see cref="IMetadataStore"/>.
-    /// An MCP server locked to that database sends the document to AI clients as extra
-    /// instructions, so this text must not contain secrets.
+    /// Backs the Database Metadata dialog: the user pastes a metadata document (JSON,
+    /// Markdown or any text the AI can read) for a connection + database, and it is saved
+    /// through <see cref="IMetadataStore"/>. An MCP server locked to that database sends the
+    /// document to AI clients as extra instructions, so this text must not contain secrets.
     /// </summary>
     public partial class MetadataDialogViewModel : ObservableObject
     {
@@ -69,7 +68,9 @@ namespace LightSQL.ViewModels
         }
 
         /// <summary>
-        /// Validates and saves the pasted metadata. Empty JSON removes any saved entry.
+        /// Saves the pasted metadata document. The document can be JSON, Markdown or any
+        /// text the AI can read; it is not parsed, only appended to the AI's instructions.
+        /// An empty box removes any saved entry.
         /// </summary>
         /// <param name="error">The reason saving failed, or null on success.</param>
         /// <returns>True when the metadata was saved (or cleared); false when invalid.</returns>
@@ -83,13 +84,6 @@ namespace LightSQL.ViewModels
             }
 
             string text = Json ?? string.Empty;
-
-            if (string.IsNullOrWhiteSpace(text) == false && IsValidJson(text) == false)
-            {
-                error = "The metadata is not valid JSON.";
-
-                return false;
-            }
 
             if (string.IsNullOrWhiteSpace(text) == true)
             {
@@ -110,25 +104,6 @@ namespace LightSQL.ViewModels
             error = null;
 
             return true;
-        }
-
-        /// <summary>
-        /// Whether a string parses as a JSON document.
-        /// </summary>
-        /// <param name="text">The text to check.</param>
-        /// <returns>True when the text is well-formed JSON.</returns>
-        private static bool IsValidJson(string text)
-        {
-            try
-            {
-                using JsonDocument document = JsonDocument.Parse(text);
-
-                return true;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
         }
     }
 }

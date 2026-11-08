@@ -1,9 +1,10 @@
 namespace LightSQL.Models
 {
     /// <summary>
-    /// Schema and semantic metadata (a JSON document) the user pastes for a database,
-    /// so an MCP server locked to that database can pass it to AI clients as extra
-    /// instructions. Keyed by connection name and database.
+    /// Schema and semantic metadata (a JSON, Markdown or free-text document) the user
+    /// pastes for a database, so an MCP server locked to that database — and the in-app
+    /// chat — can pass it to the AI as extra instructions. Keyed by connection name and
+    /// database.
     /// </summary>
     public sealed class ConnectionMetadata
     {
@@ -18,7 +19,10 @@ namespace LightSQL.Models
         public string Database { get; set; } = string.Empty;
 
         /// <summary>
-        /// The metadata document (JSON) sent to AI clients as extra instructions.
+        /// The metadata document sent to the AI as extra instructions. It can be JSON,
+        /// Markdown or any text; it is appended verbatim and never parsed. The property is
+        /// named "Json" for historical reasons and to keep existing "metadata.json" files
+        /// readable.
         /// </summary>
         public string Json { get; set; } = string.Empty;
 

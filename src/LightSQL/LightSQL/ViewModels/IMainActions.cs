@@ -34,5 +34,11 @@ namespace LightSQL.ViewModels
         /// <param name="database">The server's default database, or null for the connection's default.</param>
         /// <returns>A task that completes when the server is running or has failed.</returns>
         Task OpenMcpServerTabAsync(string? database);
+
+        /// <summary>
+        /// Opens a chat tab bound to a single database, so the user can ask an LLM about it.
+        /// </summary>
+        /// <param name="database">The database the chat is bound to.</param>
+        void OpenChatTab(string? database);
     }
 }

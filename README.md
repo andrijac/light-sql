@@ -47,6 +47,11 @@ a common engine abstraction, so the same UI works across all three.
   default**; opt-in write-access per server. You can also paste schema/semantic metadata
   (JSON) that is sent to the AI as extra instructions. See
   [MCP server](#mcp-server-for-ai-clients) below.
+- **In-app chat (DB assistant).** Ask an LLM about a database from inside LightSQL — it runs
+  the same tools in-process and answers. Bound to a single database, **read-only by default**,
+  and it reuses the pasted metadata. Pick a provider and model in the chat tab (Groq, Together,
+  OpenRouter, OpenAI or a local server); add a key per provider in **Tools → AI Provider…**. See
+  [docs/chat.md](docs/chat.md).
 
 For full details see the [`docs/`](docs/) folder — in particular
 [features.md](docs/features.md), [architecture.md](docs/architecture.md) and
@@ -201,5 +206,6 @@ access sits behind interfaces. Architecture overview:
 | Connections & security | [docs/connections-and-security.md](docs/connections-and-security.md) |
 | Database providers (multi-engine) | [docs/database-providers.md](docs/database-providers.md) |
 | MCP server | [docs/mcp-server.md](docs/mcp-server.md) |
+| In-app chat | [docs/chat.md](docs/chat.md) |
 | Themes | [docs/themes.md](docs/themes.md) |
 | Coding standards | [docs/coding-standards.md](docs/coding-standards.md) |

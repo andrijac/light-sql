@@ -437,7 +437,7 @@
         </Setter>
     </Style>
 
-    <!-- Read-only (non-editable) combo box with a themed drop-down list. -->
+    <!-- Combo box (editable and non-editable) with a themed drop-down list. -->
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{DynamicResource Theme.ControlBackground}" />
         <Setter Property="Foreground" Value="{DynamicResource Theme.Foreground}" />
@@ -469,6 +469,26 @@
                                           ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
                                           ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
 
+                        <!-- Shown only for editable combo boxes; sits above the toggle button
+                             (which keeps the uncovered arrow area for opening the drop-down). -->
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 Margin="{TemplateBinding Padding}"
+                                 VerticalAlignment="Center"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 CaretBrush="{DynamicResource Theme.Foreground}"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}"
+                                 Focusable="True"
+                                 Visibility="Collapsed">
+                            <TextBox.Template>
+                                <ControlTemplate TargetType="TextBox">
+                                    <ScrollViewer x:Name="PART_ContentHost" />
+                                </ControlTemplate>
+                            </TextBox.Template>
+                        </TextBox>
+
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                AllowsTransparency="True"
@@ -489,6 +509,11 @@
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <!-- Editable mode: reveal the text box and hide the selected-item presenter. -->
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Toggle" Property="BorderBrush" Value="{DynamicResource Theme.FocusBorder}" />
                         </Trigger>

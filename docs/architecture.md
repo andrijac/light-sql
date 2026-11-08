@@ -16,6 +16,8 @@ src/LightSQL/
 │  ├─ Models/                    Plain data types (DTOs, enums)
 │  ├─ Services/                  Infrastructure (SQL access, storage, dialogs)
 │  │  ├─ Database/               Per-engine providers + dialects + registry (SQL Server, PostgreSQL, MySQL)
+│  │  ├─ Tools/                  Shared DB tool core (executor, catalog, assistant prompt) — used by MCP + chat
+│  │  ├─ Llm/                    Chat LLM client (OpenAI-compatible), provider catalog, agent loop, client factory
 │  │  └─ Mcp/                    MCP server for AI clients (host, tools, port finder)
 │  ├─ ViewModels/               View models (MVVM)
 │  ├─ Views/                    Windows and user controls (XAML + code-behind)
@@ -109,10 +111,20 @@ and `McpServerHostFactory`.
   - Connection strings are built by each `IDatabaseProvider.BuildConnectionString`
     (there is no longer a shared `ConnectionStringFactory`).
   - `IClipboardService` / `ClipboardService` — copies text (MCP client setup).
-  - `IMetadataStore` / `MetadataStore` — per connection + database JSON metadata in
-    `%APPDATA%\LightSQL\metadata.json`, sent to AI clients as extra MCP instructions.
+  - `IMetadataStore` / `MetadataStore` — per connection + database metadata document
+    (JSON, Markdown or any text) in `%APPDATA%\LightSQL\metadata.json`, sent to AI clients
+    as extra MCP instructions.
   - `PromptLibrary` — reads embedded text prompts (the metadata-extraction prompt shown in
     Tools → Metadata Extraction Prompt).
+  - `ILlmSettingsStore` / `LlmSettingsStore` — the chat's LLM settings in `llm.json`: one API key
+    per provider (each DPAPI-encrypted, never plaintext) and the last-used provider/model.
+  - `Tools/` — the transport-neutral DB tool core: `DatabaseToolExecutor` (list/describe/execute
+    with the single-database lock + read-only guard), `DatabaseToolCatalog` (tool schema) and
+    `DatabaseAssistantPrompt` (shared system prompt). Used by both the MCP server and the chat.
+  - `Llm/` — `ILlmChatClient` / `OpenAiCompatibleChatClient` (the LLM backend, used by every
+    provider), `LlmProviderCatalog` (the preconfigured providers + suggested models), `ChatAgent`
+    (the tool-call loop, with a swappable client) and `ILlmClientFactory` / `LlmClientFactory`
+    (builds a client for a chosen provider + model). See [chat.md](chat.md).
   - `Mcp/` — `IMcpServerHostFactory` / `McpServerHostFactory` start an MCP server
     (own `SqlConnectionService`, loopback port 9000+, stateless Streamable HTTP at
     `/mcp`, Host/Origin guard); `McpDatabaseTools` (the tools, each locked to the
@@ -145,6 +157,9 @@ and `McpServerHostFactory`.
     showing the previous selection, so `MainViewModel` watches every tab's
     `ActiveDatabase` and adds a missing name to `Databases` (sorted, matched
     case-insensitively; a different-case spelling is replaced by the listed one).
+  - `ChatTabViewModel` — one chat bound to a database: provider + model pickers, transcript, input,
+    Send/Stop, the write-access toggle; runs tool calls through the shared executor and the
+    `ChatAgent` loop.
   - `McpServerTabViewModel` — one MCP server: state, port, endpoint, client setup
     text and copy commands, activity log (tool calls posted to the UI thread),
     access mode (read-only by default, `IsReadWrite` after confirmation).
@@ -173,7 +188,7 @@ and `McpServerHostFactory`.
 - **Views**
   - `MainWindow` — the shell. The document area is a `TabControl` re-templated to
     show only the tab headers, and below it an `ItemsControl` with a `Grid` panel
-    that holds **one view per tab** (`QueryTabView` or `McpServerTabView`, chosen by
+    that holds **one view per tab** (`QueryTabView`, `McpServerTabView` or `ChatTabView`, chosen by
     implicit `DataTemplate`s per view-model type), only the selected one visible.
     Header templates are also per type (query: name, *(executing)*, ✕; MCP: state
     dot, name with port, ✕), and `DocumentTabStyleSelector` gives each type its own
@@ -188,7 +203,9 @@ and `McpServerHostFactory`.
     (the last two bind to `MainViewModel.ShowLineNumbers` / `EditorFontSize`, which
     are re-raised when Options are saved).
   - `McpServerTabView` — MCP server details, client setup and activity grid.
-  - `ConnectionDialog`, `OptionsDialog`, `MetadataDialog`, `MetadataPromptDialog`, `InputDialog`.
+  - `ChatTabView` — the chat transcript, access toggle and input box.
+  - `ConnectionDialog`, `OptionsDialog`, `MetadataDialog`, `MetadataPromptDialog`,
+    `LlmSettingsDialog`, `InputDialog`.
 - **Controls** — `ResultGridsPanel` lays out the result grids: they fill the visible
   results area (one grid = whole pane, several share it equally), with a minimum
   height per grid, beyond which the panel grows and the surrounding `ScrollViewer`

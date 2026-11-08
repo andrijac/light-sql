@@ -23,6 +23,11 @@ namespace LightSQL.Controls
         public Style? McpServerTabStyle { get; set; }
 
         /// <summary>
+        /// The style for <see cref="ChatTabViewModel"/> tabs.
+        /// </summary>
+        public Style? ChatTabStyle { get; set; }
+
+        /// <summary>
         /// Returns the style for a tab's view model.
         /// </summary>
         /// <param name="item">The tab view model.</param>
@@ -33,6 +38,11 @@ namespace LightSQL.Controls
             if (item is McpServerTabViewModel)
             {
                 return McpServerTabStyle;
+            }
+
+            if (item is ChatTabViewModel)
+            {
+                return ChatTabStyle;
             }
 
             if (item is QueryTabViewModel)
